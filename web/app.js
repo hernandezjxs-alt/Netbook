@@ -339,8 +339,11 @@ function renderBadge() {
     badge.hidden = true;
     return;
   }
-  const { username, role } = state.profile;
-  badge.textContent = `${username || state.user?.email} · ${role === "admin" ? "Admin" : "Usuario"}`;
+  const { username, role, full_name } = state.profile;
+  const raw = (full_name || username || state.user?.email || "").split("@")[0].trim().split(/\s+/)[0];
+  const first = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "";
+  badge.textContent = `👋 ¡Hola, ${first}!${role === "admin" ? " · Admin" : ""}`;
+  badge.title = username || state.user?.email || "";
   badge.classList.toggle("admin", role === "admin");
   badge.hidden = false;
 }

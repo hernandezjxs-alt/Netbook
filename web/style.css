@@ -610,3 +610,6 @@ input, select, textarea { font-size: max(16px, 1rem); }
 .taxo-x { background: none; border: 0; color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 0.3rem; opacity: 0.7; }
 .taxo-x:hover { opacity: 1; color: #ff4b59; }
 @media (max-width: 560px) { .taxo { grid-template-columns: 1fr; } }
+
+#user-badge { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+@media (max-width: 520px) { #user-badge { max-width: 7.5rem; } }
