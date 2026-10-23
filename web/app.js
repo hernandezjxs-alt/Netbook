@@ -50,6 +50,7 @@ function renderCategoryChips(container, input) {
       onclick: () => {
         input.value = c;
         renderCategoryChips(container, input);
+        container.closest("details")?.removeAttribute("open");
       },
     }, mine ? `${c} (${used.get(c)})` : c);
   container.replaceChildren(...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));

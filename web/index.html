@@ -194,11 +194,11 @@
       <label>Categoría (para todos los archivos de esta subida)
         <input id="up-category" type="text" maxlength="60" value="General" required>
       </label>
-      <div id="up-cat-sugs" class="sugs cats"></div>
+      <details class="pick"><summary>▾ Elegir categoría</summary><div id="up-cat-sugs" class="sugs cats"></div></details>
       <label>Etiquetas (rol o género, separadas por coma)
         <input id="up-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
       </label>
-      <div id="up-tag-sugs" class="sugs"></div>
+      <details class="pick"><summary>▾ Elegir etiquetas</summary><div id="up-tag-sugs" class="sugs"></div></details>
       <label class="check"><input id="up-autotags" type="checkbox" checked> Sugerir etiquetas según el título</label>
       <label class="check"><input id="up-rights" type="checkbox" required>
         <span>Declaro que tengo derecho a guardar y compartir estos archivos (no infringen derechos de autor).</span></label>
@@ -220,7 +220,7 @@
       <label>Etiquetas a agregar (separadas por coma)
         <input id="tg-tags" type="text" maxlength="200" placeholder="Analista BI" required>
       </label>
-      <div id="tg-sugs" class="sugs"></div>
+      <details class="pick"><summary>▾ Elegir etiquetas</summary><div id="tg-sugs" class="sugs"></div></details>
       <p id="tg-status" class="msg" role="status"></p>
       <div class="modal-actions">
         <button id="tg-cancel" class="btn ghost" type="button">Cancelar</button>
@@ -254,11 +254,11 @@
       <label>Categoría
         <input id="ed-category" type="text" maxlength="60" required>
       </label>
-      <div id="ed-cat-sugs" class="sugs cats"></div>
+      <details class="pick"><summary>▾ Elegir categoría</summary><div id="ed-cat-sugs" class="sugs cats"></div></details>
       <label>Etiquetas (separadas por coma)
         <input id="ed-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
       </label>
-      <div id="ed-tag-sugs" class="sugs"></div>
+      <details class="pick"><summary>▾ Elegir etiquetas</summary><div id="ed-tag-sugs" class="sugs"></div></details>
       <p id="ed-status" class="msg" role="status"></p>
       <div class="modal-actions">
         <button id="ed-cancel" class="btn ghost" type="button">Cancelar</button>

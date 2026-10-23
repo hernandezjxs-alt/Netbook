@@ -378,3 +378,10 @@ input[type="checkbox"] { accent-color: var(--red); width: 1.1rem; height: 1.1rem
 
 .sugs.cats { max-height: 9.5rem; overflow: auto; padding: 2px; }
 .chip.small.active { color: #fff; }
+
+/* Listas desplegables de categorías y etiquetas */
+details.pick { border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+details.pick > summary { cursor: pointer; padding: 0.6rem 0.8rem; font-size: 0.9rem; color: var(--text); list-style: none; user-select: none; }
+details.pick > summary::-webkit-details-marker { display: none; }
+details.pick[open] > summary { border-bottom: 1px solid var(--line); color: var(--muted); }
+details.pick > .sugs { padding: 0.6rem; }
