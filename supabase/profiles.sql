@@ -1,0 +1,97 @@
+-- =====================================================
+-- Usuarios con roles (admin / user)
+-- Ejecutar DESPUÉS de schema.sql, en: Supabase > SQL Editor
+-- Es seguro volver a ejecutarlo (idempotente).
+-- =====================================================
+
+create table if not exists public.profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  email       text,
+  username    text,
+  role        text not null default 'user' check (role in ('admin', 'user')),
+  created_at  timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+-- Funciones auxiliares (security definer para evitar recursión en las políticas)
+create or replace function public.current_role_name()
+returns text
+language sql stable security definer set search_path = public as $$
+  select role from public.profiles where id = auth.uid()
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select role = 'admin' from public.profiles where id = auth.uid()), false)
+$$;
+
+-- Políticas
+drop policy if exists "profiles_select_own_or_admin" on public.profiles;
+create policy "profiles_select_own_or_admin" on public.profiles
+  for select using (auth.uid() = id or public.is_admin());
+
+-- Un usuario puede editar su perfil, pero NO cambiarse el rol
+drop policy if exists "profiles_update_own" on public.profiles;
+create policy "profiles_update_own" on public.profiles
+  for update using (auth.uid() = id)
+  with check (auth.uid() = id and role = public.current_role_name());
+
+-- Un admin puede editar cualquier perfil (incluido el rol)
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles
+  for update using (public.is_admin()) with check (public.is_admin());
+
+-- Sin políticas de insert/delete: los perfiles solo los crea el trigger
+-- y se eliminan en cascada al borrar el usuario de auth.
+
+-- Alta automática del perfil al registrarse.
+-- La PRIMERA cuenta creada recibe el rol 'admin'; las siguientes, 'user'.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, email, username, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(nullif(new.raw_user_meta_data->>'username', ''), split_part(new.email, '@', 1)),
+    case when not exists (select 1 from public.profiles) then 'admin' else 'user' end
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Endurece permisos: las funciones no deben poder llamarse por la API pública.
+-- is_admin() y current_role_name() siguen disponibles para usuarios con sesión (las usan las políticas).
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.is_admin() from public, anon;
+revoke execute on function public.current_role_name() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.current_role_name() to authenticated;
+
+-- Si ya había usuarios registrados antes de este script, les crea el perfil...
+insert into public.profiles (id, email, username, role)
+select u.id, u.email, split_part(u.email, '@', 1), 'user'
+from auth.users u
+on conflict (id) do nothing;
+
+-- ...y deja como admin al más antiguo si todavía no hay ningún admin.
+update public.profiles
+set role = 'admin'
+where id = (
+  select p.id from public.profiles p
+  join auth.users u on u.id = p.id
+  order by u.created_at
+  limit 1
+)
+and not exists (select 1 from public.profiles where role = 'admin');
+
+-- Para cambiar el rol de alguien manualmente:
+--   update public.profiles set role = 'admin' where email = 'correo@ejemplo.com';

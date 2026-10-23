@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141414">
+  <title>Netbook</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Login -->
+  <main id="auth" class="auth" hidden>
+    <form id="auth-form" class="auth-card" autocomplete="on">
+      <h1 class="logo">NETBOOK</h1>
+      <p class="muted">Tu biblioteca de PDFs</p>
+      <label>Usuario (correo)
+        <input id="email" type="email" autocomplete="email" required>
+      </label>
+      <label>Contraseña
+        <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+      </label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <hr class="sep">
+      <label>Nombre de usuario <span class="hint">(opcional, solo al crear cuenta)</span>
+        <input id="username" type="text" maxlength="40" autocomplete="nickname">
+      </label>
+      <button id="btn-signup" class="btn ghost" type="button">Crear cuenta</button>
+      <p id="auth-msg" class="msg" role="status"></p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <h1 class="logo">NETBOOK</h1>
+      <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
+      <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
+      <span id="user-badge" class="badge" hidden></span>
+      <button id="btn-logout" class="btn ghost" type="button">Salir</button>
+    </header>
+
+    <section id="hero" class="hero" hidden>
+      <img id="hero-img" alt="" class="hero-bg">
+      <div class="hero-shade"></div>
+      <div class="hero-body">
+        <p id="hero-kicker" class="kicker"></p>
+        <h2 id="hero-title"></h2>
+        <p id="hero-author" class="muted"></p>
+        <button id="hero-btn" class="btn light" type="button">▶ Leer</button>
+      </div>
+    </section>
+
+    <div id="empty" class="empty" hidden>
+      <h2>Tu biblioteca está vacía</h2>
+      <p class="muted">Sube tu primer PDF para empezar.</p>
+      <button id="btn-upload-empty" class="btn primary" type="button">+ Subir PDF</button>
+    </div>
+
+    <main id="rows"></main>
+  </div>
+
+  <!-- Modal de subida -->
+  <div id="upload-modal" class="modal" hidden>
+    <form id="upload-form" class="modal-card">
+      <h2>Subir PDF</h2>
+      <label>Archivo (máx. 50 MB)
+        <input id="up-file" type="file" accept="application/pdf,.pdf" required>
+      </label>
+      <label>Título
+        <input id="up-title" type="text" maxlength="200" required>
+      </label>
+      <label>Autor
+        <input id="up-author" type="text" maxlength="200">
+      </label>
+      <label>Categoría
+        <input id="up-category" type="text" maxlength="60" list="category-list" value="General" required>
+        <datalist id="category-list"></datalist>
+      </label>
+      <p id="up-status" class="msg" role="status"></p>
+      <div class="modal-actions">
+        <button id="up-cancel" class="btn ghost" type="button">Cancelar</button>
+        <button id="up-submit" class="btn primary" type="submit">Subir</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Lector -->
+  <div id="reader" class="reader" hidden>
+    <div class="reader-bar">
+      <button id="rd-close" class="icon" type="button" aria-label="Cerrar lector">✕</button>
+      <span id="rd-title" class="rd-title"></span>
+      <div class="rd-controls">
+        <button id="rd-prev" class="icon" type="button" aria-label="Página anterior">‹</button>
+        <input id="rd-page" type="number" min="1" value="1" aria-label="Página">
+        <span id="rd-total" class="muted">/ 1</span>
+        <button id="rd-next" class="icon" type="button" aria-label="Página siguiente">›</button>
+        <button id="rd-zoom-out" class="icon" type="button" aria-label="Alejar">−</button>
+        <span id="rd-zoom" class="muted">100%</span>
+        <button id="rd-zoom-in" class="icon" type="button" aria-label="Acercar">+</button>
+        <button id="rd-delete" class="icon danger" type="button" aria-label="Eliminar libro" title="Eliminar libro">🗑</button>
+      </div>
+    </div>
+    <div id="stage" class="stage">
+      <p id="rd-status" class="muted"></p>
+      <canvas id="page-canvas"></canvas>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
