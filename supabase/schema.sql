@@ -11,6 +11,9 @@ create table if not exists public.books (
   author       text,
   category     text not null default 'General',
   tags         text[] not null default '{}',  -- etiquetas para filtrar (rol o género)
+  opens        integer not null default 0,    -- veces abierto (más leídos)
+  downloads    integer not null default 0,    -- veces descargado
+  last_opened_at timestamptz,
   pages        int,
   pdf_path     text not null,
   cover_path   text,

@@ -185,7 +185,7 @@ async function loadCovers() {
 
 /* ---------- Render: filas estilo Netflix ---------- */
 
-function cardEl(b) {
+function cardEl(b, rank = null, stat = null) {
   const cover = state.covers.get(b.id);
   const p = state.progress.get(b.id);
   const pct = p && b.pages ? clamp(Math.round((p.last_page / b.pages) * 100), 0, 100) : 0;
@@ -200,17 +200,19 @@ function cardEl(b) {
     cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, b.title),
     el("div", { class: "card-info" }, el("strong", {}, b.title), el("span", {}, b.author || b.category)),
     el("span", { class: "check-badge", "aria-hidden": "true" }, "✓"),
+    rank ? el("span", { class: "rank" + (rank <= 3 ? " top" : "") }, `#${rank}`) : null,
+    stat ? el("span", { class: "stat" }, stat) : null,
     pct > 0 ? el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })) : null
   );
 }
 
-function rowEl(title, books, grid = false) {
+function rowEl(title, books, grid = false, decorate = null) {
   const section = el("section", { class: "row" }, el("h2", {}, title));
   if (grid && !books.length) {
     section.append(el("p", { class: "muted" }, "Sin resultados."));
     return section;
   }
-  const strip = el("div", { class: grid ? "strip grid" : "strip" }, books.map(cardEl));
+  const strip = el("div", { class: grid ? "strip grid" : "strip" }, books.map((b, i) => (decorate ? cardEl(b, ...decorate(b, i)) : cardEl(b))));
   if (grid) {
     section.append(strip);
     return section;
@@ -250,6 +252,10 @@ function renderHero(resuming) {
   if (cover) img.src = cover;
   else img.removeAttribute("src");
   img.hidden = !cover;
+  const poster = $("#hero-cover");
+  if (cover) poster.src = cover;
+  else poster.removeAttribute("src");
+  poster.hidden = !cover;
   $("#hero-kicker").textContent = resuming[0] ? "Continuar leyendo" : "Agregado recientemente";
   $("#hero-title").textContent = book.title;
   $("#hero-author").textContent = book.author || book.category;
@@ -377,6 +383,10 @@ function render() {
   }
 
   if (resuming.length) rows.append(rowEl("Continuar leyendo", resuming));
+  const mostRead = state.books.filter((b) => (b.opens || 0) > 0).sort((a, b) => b.opens - a.opens).slice(0, 10);
+  if (mostRead.length) rows.append(rowEl("🔥 Más leídos", mostRead, false, (b, i) => [i + 1, `${b.opens} 👁`]));
+  const mostDl = state.books.filter((b) => (b.downloads || 0) > 0).sort((a, b) => b.downloads - a.downloads).slice(0, 10);
+  if (mostDl.length) rows.append(rowEl("⬇ Más descargados", mostDl, false, (b, i) => [i + 1, `${b.downloads} ⬇`]));
   rows.append(rowEl("Agregados recientemente", state.books.slice(0, 15)));
 
   const groups = new Map();
@@ -908,11 +918,22 @@ async function openReader(book) {
     return;
   }
 
+  bumpCounter(book, "opens");
   const saved = state.progress.get(book.id)?.last_page ?? 1;
   reader.page = clamp(saved, 1, reader.pdf.numPages);
   $("#rd-status").textContent = "";
   $("#page-canvas").hidden = false;
   await renderPage();
+}
+
+// Suma 1 a "opens" o "downloads" (falla en silencio: no debe estorbar la lectura).
+async function bumpCounter(book, field) {
+  try {
+    const patch = { [field]: (book[field] || 0) + 1 };
+    if (field === "opens") patch.last_opened_at = new Date().toISOString();
+    const { error } = await sb.from("books").update(patch).eq("id", book.id);
+    if (!error) Object.assign(book, patch);
+  } catch { /* sin conexión */ }
 }
 
 async function renderPage() {
@@ -1048,6 +1069,47 @@ $("#rd-page").addEventListener("change", (e) => go(e.target.value));
 $("#rd-zoom-in").addEventListener("click", () => setZoom(reader.zoom + 0.25));
 $("#rd-zoom-out").addEventListener("click", () => setZoom(reader.zoom - 0.25));
 $("#rd-delete").addEventListener("click", deleteBook);
+
+const safeName = (t) => t.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80) || "libro";
+
+$("#rd-share").addEventListener("click", async () => {
+  const b = reader.book;
+  if (!b) return;
+  try {
+    const { data, error } = await sb.storage.from("pdfs").createSignedUrl(b.pdf_path, 7 * 24 * 3600);
+    if (error) throw error;
+    const url = data.signedUrl;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: b.title, text: `${b.title}${b.author ? " — " + b.author : ""} (enlace válido 7 días)`, url });
+        return;
+      } catch (e) {
+        if (e?.name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard.writeText(url);
+    toast("Enlace copiado. Quien lo tenga puede abrir el PDF durante 7 días.", 7000);
+  } catch (err) {
+    toast(`No se pudo compartir: ${err?.message || err}`, 7000);
+  }
+});
+
+$("#rd-download").addEventListener("click", async () => {
+  const b = reader.book;
+  if (!b) return;
+  try {
+    const { data, error } = await sb.storage.from("pdfs").createSignedUrl(b.pdf_path, 3600, { download: `${safeName(b.title)}.pdf` });
+    if (error) throw error;
+    const a = el("a", { href: data.signedUrl, download: `${safeName(b.title)}.pdf` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    bumpCounter(b, "downloads");
+    toast("Descargando…");
+  } catch (err) {
+    toast(`No se pudo descargar: ${err?.message || err}`, 7000);
+  }
+});
 
 /* ---------- Editar libro ---------- */
 
