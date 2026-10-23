@@ -9,7 +9,8 @@
   <meta property="og:description" content="Biblioteca digital abierta para leer, compartir y descargar libros.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -51,9 +52,9 @@
       <button id="btn-mode" class="btn ghost" type="button">Crear cuenta</button>
       <p id="auth-msg" class="msg" role="status"></p>
       <div class="auth-extra">
-        <button class="btn ghost small app-install" type="button">⬇ Instalar app</button>
-        <button class="btn ghost small app-share" type="button">↗ Compartir app</button>
-        <button class="btn ghost small contact-open" type="button">✉ Contacto</button>
+        <button class="icon app-install" type="button" title="Instalar la app" aria-label="Instalar la app en tu celular">📲</button>
+        <button class="icon app-share" type="button" title="Compartir la app" aria-label="Compartir el link de la app">📤</button>
+        <button class="icon contact-open" type="button" title="Contacto" aria-label="Contacto">✉</button>
       </div>
     </form>
   </main>
@@ -63,16 +64,16 @@
     <header class="topbar">
       <h1 class="logo">NETBOOK</h1>
       <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
-      <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
-      <button class="btn ghost small app-install" type="button" title="Instalar la app en tu celular">⬇ Instalar app</button>
-      <button class="btn ghost small app-share" type="button" title="Compartir el link de la app">↗ Compartir app</button>
+      <button id="btn-upload" class="icon primary" type="button" title="Subir PDF" aria-label="Subir PDF">＋</button>
+      <button class="icon app-install" type="button" title="Instalar la app" aria-label="Instalar la app en tu celular">📲</button>
+      <button class="icon app-share" type="button" title="Compartir la app" aria-label="Compartir el link de la app">📤</button>
       <button id="btn-theme" class="icon" type="button" aria-label="Cambiar tema claro u oscuro" title="Tema claro / oscuro">🌓</button>
       <button id="btn-stats" class="icon" type="button" aria-label="Estadísticas" title="Estadísticas y exportar">📊</button>
       <button id="btn-contact" class="icon" type="button" aria-label="Contacto" title="Contacto">✉</button>
       <button id="btn-users" class="icon" type="button" aria-label="Usuarios" title="Usuarios" hidden>👥</button>
       <button id="btn-inbox" class="icon" type="button" aria-label="Mensajes recibidos" title="Mensajes recibidos" hidden>📨<span id="inbox-count" class="dot" hidden></span></button>
       <span id="user-badge" class="badge" hidden></span>
-      <button id="btn-logout" class="btn ghost" type="button">Salir</button>
+      <button id="btn-logout" class="icon" type="button" title="Salir" aria-label="Cerrar sesión">⏻</button>
     </header>
 
     <nav id="filters" class="filters" hidden aria-label="Filtros por etiqueta">
@@ -85,9 +86,9 @@
           <option value="read">Más leídos</option>
           <option value="pages">Más páginas</option>
         </select>
-        <button id="btn-view" class="btn ghost small" type="button" title="Cambiar vista" aria-label="Cambiar vista">☰ Lista</button>
-        <button id="btn-autotag" class="btn ghost small" type="button" hidden>✨ Etiquetar automático</button>
-        <button id="btn-select" class="btn ghost small" type="button">Seleccionar</button>
+        <button id="btn-view" class="icon" type="button" title="Cambiar vista" aria-label="Cambiar vista (lista o cuadrícula)">☰</button>
+        <button id="btn-autotag" class="icon" type="button" title="Etiquetar automático" aria-label="Etiquetar automático" hidden>✨</button>
+        <button id="btn-select" class="icon" type="button" title="Seleccionar varios" aria-label="Seleccionar varios libros">☑</button>
       </div>
     </nav>
 

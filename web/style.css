@@ -539,3 +539,10 @@ details.pick > .sugs { padding: 0.6rem; }
 
 .auth-extra { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
 .topbar .app-install, .topbar .app-share { white-space: nowrap; }
+
+/* Botones solo con icono */
+.icon.primary { background: linear-gradient(135deg, #ff4b59, #e0263a); border-color: transparent; color: #fff; font-size: 1.4rem; font-weight: 700; box-shadow: 0 6px 18px rgba(255, 59, 74, 0.28); }
+.icon.primary:hover:not(:disabled) { background: linear-gradient(135deg, #ff5d69, #ee2f43); }
+.topbar .icon, .filter-actions .icon, .auth-extra .icon { min-width: 2.4rem; height: 2.4rem; font-size: 1.05rem; }
+.topbar { gap: 0.5rem; }
+.topbar .search { flex: 1 1 140px; }

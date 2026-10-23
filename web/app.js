@@ -576,7 +576,7 @@ function renderFilters() {
   const untagged = state.books.filter((b) => !tagsOf(b).length).length;
   const favs = state.books.filter((b) => b.favorite).length;
   $("#sort").value = state.sort;
-  $("#btn-view").textContent = state.view === "list" ? "▦ Cuadrícula" : "☰ Lista";
+  $("#btn-view").textContent = state.view === "list" ? "▦" : "☰";
   const chip = (label, key, count, active) =>
     el("button", { type: "button", class: "chip" + (active ? " active" : ""), onclick: () => toggleTag(key) }, `${label} (${count})`);
   $("#chips").replaceChildren(
@@ -588,7 +588,8 @@ function renderFilters() {
     ].filter(Boolean)
   );
   $("#btn-autotag").hidden = !untagged;
-  $("#btn-select").textContent = state.selecting ? "Salir de selección" : "Seleccionar";
+  $("#btn-select").textContent = state.selecting ? "✕" : "☑";
+  $("#btn-select").title = state.selecting ? "Salir de la selección" : "Seleccionar varios";
 }
 
 function render() {
