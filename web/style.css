@@ -600,3 +600,4 @@ input, select, textarea { font-size: max(16px, 1rem); }
 .new-item { display: flex; gap: 0.5rem; width: 100%; flex-basis: 100%; margin-bottom: 0.4rem; }
 .new-item .new-item-input { flex: 1; min-width: 0; padding: 0.55rem 0.8rem; }
 .new-item .btn { white-space: nowrap; }
+.chip.small.active { color: #fff; }

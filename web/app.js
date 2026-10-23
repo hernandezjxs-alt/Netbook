@@ -55,7 +55,7 @@ function renderCategoryChips(container, input) {
   const used = new Map();
   for (const b of state.books) if (b.category) used.set(b.category, (used.get(b.category) || 0) + 1);
   const names = [...used.keys()].sort((a, b) => used.get(b) - used.get(a));
-  const rest = DEFAULT_CATEGORIES.filter((c) => !used.has(c));
+  const rest = [...customList("nb_custom_cats"), ...DEFAULT_CATEGORIES].filter((c, i, a) => !used.has(c) && a.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i);
   const mk = (c, mine) =>
     el("button", {
       type: "button",
@@ -67,12 +67,20 @@ function renderCategoryChips(container, input) {
       },
     }, mine ? `${c} (${used.get(c)})` : c);
   const create = newItemRow("Nueva categoría (ej. Yacimientos)", (v) => {
+    addCustom("nb_custom_cats", v);
     input.value = v;
     renderCategoryChips(container, input);
     container.closest("details")?.removeAttribute("open");
   });
   container.replaceChildren(create, ...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
 }
+
+// Etiquetas y categorías creadas a mano: quedan en la lista aunque aún no tengan libros.
+const customList = (k) => { try { return JSON.parse(pref(k, "[]")); } catch { return []; } };
+const addCustom = (k, v) => {
+  const cur = customList(k);
+  if (!cur.some((x) => x.toLowerCase() === v.toLowerCase())) setPref(k, JSON.stringify([...cur, v].slice(-60)));
+};
 
 const NONE_TAG = "__none__";
 const FAV_TAG = "__fav__"; // filtro especial: favoritos
@@ -509,10 +517,14 @@ function unionTags(current, added) {
 
 // Botones "+ Etiqueta" para agregar rápido al campo de texto.
 function renderSuggestions(container, input) {
-  const names = [...new Set([...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS])];
+  const sel = new Set(normTags(input.value).map((t) => t.toLowerCase()));
+  const all = [...customList("nb_custom_tags"), ...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS];
+  const names = all.filter((t, i) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i);
   const create = newItemRow("Nueva etiqueta (ej. Yacimientos)", (v) => {
+    addCustom("nb_custom_tags", v);
     input.value = unionTags(normTags(input.value), [v]).join(", ");
-    toast(`Etiqueta "${v}" agregada. Se guarda con el libro.`);
+    renderSuggestions(container, input);
+    toast(`Etiqueta "${v}" creada y agregada a este libro.`);
   });
   container.replaceChildren(
     create,
@@ -521,12 +533,13 @@ function renderSuggestions(container, input) {
         "button",
         {
           type: "button",
-          class: "chip small",
+          class: "chip small" + (sel.has(t.toLowerCase()) ? " active" : ""),
           onclick: () => {
             input.value = unionTags(normTags(input.value), [t]).join(", ");
+            renderSuggestions(container, input);
           },
         },
-        `+ ${t}`
+        `${sel.has(t.toLowerCase()) ? "✓" : "+"} ${t}`
       )
     )
   );
