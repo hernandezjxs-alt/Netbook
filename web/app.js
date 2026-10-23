@@ -2276,6 +2276,12 @@ async function openStats() {
   $("#stats-modal").hidden = false;
   if (state.profile?.role === "admin") {
     const { data } = await sb.rpc("admin_users");
+    const cards = $("#stats-body .stat-cards");
+    if (cards && data) {
+      const week = Date.now() - 7 * 86400000;
+      const fresh = data.filter((u) => new Date(u.created_at).getTime() > week).length;
+      cards.prepend(card(data.length, fresh ? `usuarios (+${fresh} esta semana)` : "usuarios registrados"));
+    }
     const who = (data || []).filter((u) => u.books > 0).sort((a, b) => b.books - a.books).map((u) => [u.username || u.full_name || u.email, Number(u.books)]);
     if (who.length) $("#stats-body").append(el("h3", {}, "Aportes por colaborador"), barList(who));
   }

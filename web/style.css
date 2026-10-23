@@ -631,3 +631,5 @@ input, select, textarea { font-size: max(16px, 1rem); }
 .hl-bar[hidden] { display: none; }
 .hl-quote { margin: 0; padding: 0.6rem 0.8rem; border-left: 3px solid #f5c518; background: rgba(255, 224, 51, 0.08); border-radius: 6px; font-size: 0.9rem; font-style: italic; line-height: 1.4; }
 #note-modal textarea { width: 100%; }
+
+.stats-card .stat-cards { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
