@@ -37,6 +37,19 @@ const DEFAULT_CATEGORIES = [
 ];
 const categoryOptions = () => [...new Set([...DEFAULT_CATEGORIES, ...state.books.map((b) => b.category).filter(Boolean)])];
 
+// Fila "escribe una nueva y agrégala" al inicio de los desplegables de categoría y etiquetas.
+function newItemRow(placeholder, onAdd) {
+  const inp = el("input", { type: "text", maxlength: "60", placeholder, class: "new-item-input", enterkeyhint: "done" });
+  const add = () => {
+    const v = inp.value.trim().replace(/\s+/g, " ");
+    if (!v) return;
+    onAdd(v.charAt(0).toUpperCase() + v.slice(1));
+    inp.value = "";
+  };
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); add(); } });
+  return el("div", { class: "new-item" }, inp, el("button", { type: "button", class: "btn primary small", onclick: add }, "＋ Crear"));
+}
+
 // Botones para elegir categoría con un toque (el desplegable nativo solo mostraba la opción escrita).
 function renderCategoryChips(container, input) {
   const used = new Map();
@@ -53,7 +66,12 @@ function renderCategoryChips(container, input) {
         container.closest("details")?.removeAttribute("open");
       },
     }, mine ? `${c} (${used.get(c)})` : c);
-  container.replaceChildren(...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
+  const create = newItemRow("Nueva categoría (ej. Yacimientos)", (v) => {
+    input.value = v;
+    renderCategoryChips(container, input);
+    container.closest("details")?.removeAttribute("open");
+  });
+  container.replaceChildren(create, ...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
 }
 
 const NONE_TAG = "__none__";
@@ -492,7 +510,12 @@ function unionTags(current, added) {
 // Botones "+ Etiqueta" para agregar rápido al campo de texto.
 function renderSuggestions(container, input) {
   const names = [...new Set([...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS])];
+  const create = newItemRow("Nueva etiqueta (ej. Yacimientos)", (v) => {
+    input.value = unionTags(normTags(input.value), [v]).join(", ");
+    toast(`Etiqueta "${v}" agregada. Se guarda con el libro.`);
+  });
   container.replaceChildren(
+    create,
     ...names.map((t) =>
       el(
         "button",
