@@ -277,6 +277,7 @@
       <p id="dt-progress-text" class="muted small-text"></p>
       <div class="detail-actions">
         <button id="dt-read" class="btn primary" type="button">▶ Leer</button>
+        <button id="dt-preview" class="btn ghost" type="button">👁 Vista previa</button>
         <button id="dt-fav" class="btn ghost" type="button">♡ Favorito</button>
         <button id="dt-share" class="btn ghost" type="button">🔗 Compartir</button>
         <button id="dt-download" class="btn ghost" type="button">⬇ Descargar</button>
@@ -352,6 +353,8 @@
         <button id="rd-zoom-out" class="icon" type="button" aria-label="Alejar">−</button>
         <span id="rd-zoom" class="muted">100%</span>
         <button id="rd-zoom-in" class="icon" type="button" aria-label="Acercar">+</button>
+        <button id="rd-spread" class="icon" type="button" aria-label="Ver dos páginas" title="Dos páginas">📖</button>
+        <button id="rd-full" class="icon" type="button" aria-label="Pantalla completa" title="Pantalla completa">⛶</button>
         <button id="rd-bm" class="icon" type="button" aria-label="Marcadores" title="Marcadores">🔖</button>
         <button id="rd-mode" class="icon" type="button" aria-label="Modo de lectura" title="Modo de lectura (normal, sepia, noche)">🌗</button>
         <button id="rd-share" class="icon" type="button" aria-label="Compartir enlace" title="Compartir enlace (válido 7 días)">🔗</button>
@@ -360,9 +363,16 @@
         <button id="rd-delete" class="icon danger" type="button" aria-label="Eliminar libro" title="Eliminar libro">🗑</button>
       </div>
     </div>
+    <div id="rd-banner" class="rd-banner" hidden>
+      <span id="rd-banner-text"></span>
+      <button id="rd-full-read" class="btn primary small" type="button">Leer completo</button>
+    </div>
     <div id="stage" class="stage">
       <p id="rd-status" class="muted"></p>
-      <canvas id="page-canvas"></canvas>
+      <div id="pages" class="pages">
+        <canvas id="page-canvas"></canvas>
+        <canvas id="page-canvas-2" hidden></canvas>
+      </div>
     </div>
   </div>
 

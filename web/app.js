@@ -1143,20 +1143,27 @@ const reader = {
   pdf: null,
   page: 1,
   zoom: 1,
-  task: null,
+  tasks: [],
+  limit: 0,        // última página accesible (en vista previa es menor que el total)
+  preview: false,  // vista previa: solo unas pocas páginas, sin guardar progreso
+  spread: false,   // dos páginas a la vez
   token: 0, // invalida cargas obsoletas al cerrar/abrir
   seq: 0,   // invalida renders obsoletos al cambiar de página
   ready: false,
   saveTimer: null,
 };
 
-async function openReader(book) {
+async function openReader(book, opts = {}) {
   const token = ++reader.token;
   reader.book = book;
   reader.pdf = null;
   reader.zoom = 1;
   reader.page = 1;
   reader.ready = false;
+  reader.preview = !!opts.preview;
+  reader.spread = pref("nb_spread", "0") === "1";
+  reader.limit = book.pages || 1;
+  $("#rd-banner").hidden = true;
 
   $("#reader").hidden = false;
   document.body.classList.add("noscroll");
@@ -1187,9 +1194,19 @@ async function openReader(book) {
     return;
   }
 
-  bumpCounter(book, "opens");
-  const saved = state.progress.get(book.id)?.last_page ?? 1;
-  reader.page = clamp(saved, 1, reader.pdf.numPages);
+  const total = reader.pdf.numPages;
+  if (reader.preview) {
+    // muestra pequeña: ~10 % del libro, entre 3 y 10 páginas
+    reader.limit = Math.min(total, clamp(Math.ceil(total * 0.1), 3, 10));
+    reader.page = 1;
+    $("#rd-banner-text").textContent = `Vista previa: páginas 1 a ${reader.limit} de ${total}`;
+    $("#rd-banner").hidden = false;
+  } else {
+    reader.limit = total;
+    bumpCounter(book, "opens");
+    const saved = state.progress.get(book.id)?.last_page ?? 1;
+    reader.page = clamp(saved, 1, total);
+  }
   $("#rd-status").textContent = "";
   $("#page-canvas").hidden = false;
   await renderPage();
@@ -1209,32 +1226,43 @@ async function renderPage() {
   const { pdf, token } = reader;
   if (!pdf) return;
   const seq = ++reader.seq;
+  if (reader.spread && reader.page % 2 === 0) reader.page -= 1; // parejas (1,2), (3,4)…
 
-  if (reader.task) {
-    reader.task.cancel();
-    try { await reader.task.promise; } catch { /* cancelado */ }
-    reader.task = null;
+  if (reader.tasks.length) {
+    reader.tasks.forEach((t) => t.cancel());
+    await Promise.allSettled(reader.tasks.map((t) => t.promise));
+    reader.tasks = [];
   }
-  const page = await pdf.getPage(reader.page);
+  const nums = [reader.page];
+  if (reader.spread && reader.page + 1 <= reader.limit) nums.push(reader.page + 1);
+  const pages = await Promise.all(nums.map((n) => pdf.getPage(n)));
   if (token !== reader.token || seq !== reader.seq) return;
 
   const stage = $("#stage");
-  const base = page.getViewport({ scale: 1 });
-  const fit = Math.min((stage.clientWidth - 24) / base.width, 2);
+  const gap = 8;
+  const base = pages[0].getViewport({ scale: 1 });
+  const byWidth = (stage.clientWidth - 24 - (nums.length > 1 ? gap : 0)) / (base.width * nums.length);
+  const byHeight = (stage.clientHeight - 24) / base.height;
+  // En dos páginas o pantalla completa se ajusta también al alto para ver la página entera.
+  const fitFull = reader.spread || !!document.fullscreenElement || $("#reader").classList.contains("fs");
+  const fit = Math.min(fitFull ? Math.min(byWidth, byHeight) : byWidth, 2.5);
   const scale = fit * reader.zoom;
   const dpr = window.devicePixelRatio || 1;
-  const viewport = page.getViewport({ scale: scale * dpr });
+  const canvases = [$("#page-canvas"), $("#page-canvas-2")];
+  canvases[1].hidden = nums.length < 2;
 
-  const canvas = $("#page-canvas");
-  canvas.width = Math.floor(viewport.width);
-  canvas.height = Math.floor(viewport.height);
-  canvas.style.width = `${viewport.width / dpr}px`;
-  canvas.style.height = `${viewport.height / dpr}px`;
-
-  const task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
-  reader.task = task;
+  const tasks = pages.map((pg, i) => {
+    const viewport = pg.getViewport({ scale: scale * dpr });
+    const c = canvases[i];
+    c.width = Math.floor(viewport.width);
+    c.height = Math.floor(viewport.height);
+    c.style.width = `${viewport.width / dpr}px`;
+    c.style.height = `${viewport.height / dpr}px`;
+    return pg.render({ canvasContext: c.getContext("2d"), viewport });
+  });
+  reader.tasks = tasks;
   try {
-    await task.promise;
+    await Promise.all(tasks.map((t) => t.promise));
   } catch (err) {
     if (err?.name !== "RenderingCancelledException") console.error(err);
     return;
@@ -1247,18 +1275,22 @@ async function renderPage() {
 }
 
 function updateReaderUI() {
-  const total = reader.pdf?.numPages ?? 1;
+  const total = reader.pdf ? reader.limit : 1;
+  const stepN = reader.spread ? 2 : 1;
   $("#rd-page").value = reader.page;
   $("#rd-page").max = total;
   $("#rd-total").textContent = `/ ${total}`;
   $("#rd-prev").disabled = reader.page <= 1;
-  $("#rd-next").disabled = reader.page >= total;
+  $("#rd-next").disabled = reader.page + stepN > total;
+  $("#rd-spread").classList.toggle("on", reader.spread);
+  $("#rd-full").classList.toggle("on", !!document.fullscreenElement || $("#reader").classList.contains("fs"));
+  if (reader.preview && reader.page + stepN > total) $("#rd-banner-text").textContent = `Fin de la vista previa (${total} páginas). Para seguir leyendo abre el libro completo.`;
   $("#rd-zoom").textContent = `${Math.round(reader.zoom * 100)}%`;
 }
 
 function go(n) {
   if (!reader.pdf) return;
-  const target = clamp(Math.round(Number(n)) || 1, 1, reader.pdf.numPages);
+  const target = clamp(Math.round(Number(n)) || 1, 1, reader.limit);
   if (target === reader.page) {
     updateReaderUI();
     return;
@@ -1267,7 +1299,7 @@ function go(n) {
   reader.page = target;
   $("#stage").scrollTop = 0;
   updateReaderUI();
-  const cv = $("#page-canvas");
+  const cv = $("#pages");
   cv.classList.remove("flip-next", "flip-prev");
   void cv.offsetWidth;
   cv.classList.add(`flip-${dir}`);
@@ -1281,7 +1313,7 @@ function setZoom(z) {
 }
 
 function scheduleSave() {
-  if (!reader.book) return;
+  if (!reader.book || reader.preview) return;
   clearTimeout(reader.saveTimer);
   const id = reader.book.id;
   const page = reader.page;
@@ -1303,19 +1335,22 @@ async function saveProgress(bookId, page) {
 async function closeReader({ skipSave = false } = {}) {
   if (!reader.book) return;
   clearTimeout(reader.saveTimer);
-  const { book, page, ready } = reader;
+  const { book, page, ready, preview } = reader;
   reader.token++;
   reader.seq++;
-  reader.task?.cancel();
+  reader.tasks.forEach((t) => t.cancel());
   reader.pdf?.destroy();
   reader.book = null;
   reader.pdf = null;
-  reader.task = null;
+  reader.tasks = [];
   reader.ready = false;
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  $("#reader").classList.remove("fs");
+  $("#rd-banner").hidden = true;
 
   $("#reader").hidden = true;
   document.body.classList.remove("noscroll");
-  if (!skipSave && ready) await saveProgress(book.id, page);
+  if (!skipSave && ready && !preview) await saveProgress(book.id, page);
   render();
 }
 
@@ -1338,8 +1373,9 @@ async function deleteBook(book) {
 }
 
 $("#rd-close").addEventListener("click", () => closeReader());
-$("#rd-prev").addEventListener("click", () => go(reader.page - 1));
-$("#rd-next").addEventListener("click", () => go(reader.page + 1));
+const stepBy = (dir) => go(reader.page + dir * (reader.spread ? 2 : 1));
+$("#rd-prev").addEventListener("click", () => stepBy(-1));
+$("#rd-next").addEventListener("click", () => stepBy(1));
 $("#rd-page").addEventListener("change", (e) => go(e.target.value));
 $("#rd-zoom-in").addEventListener("click", () => setZoom(reader.zoom + 0.25));
 $("#rd-zoom-out").addEventListener("click", () => setZoom(reader.zoom - 0.25));
@@ -1469,8 +1505,8 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.target.tagName === "INPUT") return;
   if (e.key === "Escape") closeReader();
-  else if (e.key === "ArrowRight" || e.key === "PageDown") go(reader.page + 1);
-  else if (e.key === "ArrowLeft" || e.key === "PageUp") go(reader.page - 1);
+  else if (e.key === "ArrowRight" || e.key === "PageDown") stepBy(1);
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") stepBy(-1);
 });
 
 // Deslizar para cambiar de página (solo con zoom 100%).
@@ -1482,7 +1518,7 @@ $("#stage").addEventListener("touchend", (e) => {
   if (touchX === null || reader.zoom > 1) return;
   const dx = e.changedTouches[0].clientX - touchX;
   touchX = null;
-  if (Math.abs(dx) > 70) go(reader.page + (dx < 0 ? 1 : -1));
+  if (Math.abs(dx) > 70) stepBy(dx < 0 ? 1 : -1);
 });
 
 let resizeTimer;
@@ -1493,7 +1529,7 @@ window.addEventListener("resize", () => {
 
 // Guarda el progreso si se cierra la pestaña.
 window.addEventListener("pagehide", () => {
-  if (reader.book && reader.ready) saveProgress(reader.book.id, reader.page);
+  if (reader.book && reader.ready && !reader.preview) saveProgress(reader.book.id, reader.page);
 });
 
 /* ---------- Contacto ---------- */
@@ -1754,7 +1790,7 @@ $("#rd-mode").addEventListener("click", () => {
 });
 
 // Un toque sobre la página oculta o muestra la barra (lectura sin distracciones).
-$("#page-canvas").addEventListener("click", () => $("#reader").classList.toggle("immersive"));
+$("#pages").addEventListener("click", () => $("#reader").classList.toggle("immersive"));
 
 let bookmarks = [];
 async function loadBookmarks() {
@@ -1813,6 +1849,47 @@ $("#bm-form").addEventListener("submit", async (e) => {
   toast("Marcador guardado", 2000);
 });
 $("#bm-close").addEventListener("click", () => ($("#bm-modal").hidden = true));
+
+// Dos páginas
+$("#rd-spread").addEventListener("click", () => {
+  reader.spread = !reader.spread;
+  setPref("nb_spread", reader.spread ? "1" : "0");
+  updateReaderUI();
+  renderPage();
+  toast(reader.spread ? "Dos páginas (gira el celular para verlas mejor)" : "Una página", 2500);
+});
+
+// Pantalla completa (si el navegador no la permite, oculta las barras)
+$("#rd-full").addEventListener("click", async () => {
+  const box = $("#reader");
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (box.requestFullscreen) await box.requestFullscreen();
+    else throw new Error("sin API");
+  } catch {
+    box.classList.toggle("fs");
+    box.classList.toggle("immersive", box.classList.contains("fs"));
+  }
+  updateReaderUI();
+  setTimeout(() => reader.pdf && renderPage(), 150);
+});
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement) $("#reader").classList.remove("immersive");
+  else $("#reader").classList.add("immersive");
+  updateReaderUI();
+  setTimeout(() => reader.pdf && renderPage(), 150);
+});
+
+// Vista previa
+$("#dt-preview").addEventListener("click", () => {
+  const b = detailBook;
+  closeDetail();
+  if (b) openReader(b, { preview: true });
+});
+$("#rd-full-read").addEventListener("click", () => {
+  const b = reader.book;
+  if (b) openReader(b);
+});
 
 /* ---------- Estadísticas y exportación ---------- */
 

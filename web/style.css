@@ -546,3 +546,14 @@ details.pick > .sugs { padding: 0.6rem; }
 .topbar .icon, .filter-actions .icon, .auth-extra .icon { min-width: 2.4rem; height: 2.4rem; font-size: 1.05rem; }
 .topbar { gap: 0.5rem; }
 .topbar .search { flex: 1 1 140px; }
+
+/* Lector: dos páginas, pantalla completa y vista previa */
+.pages { display: inline-flex; gap: 8px; align-items: flex-start; justify-content: center; }
+.reader .icon.on { background: var(--red); border-color: transparent; color: #fff; }
+.rd-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap;
+  padding: 0.5rem 0.9rem; background: linear-gradient(90deg, rgba(255, 59, 74, 0.2), rgba(255, 59, 74, 0.06));
+  border-bottom: 1px solid var(--line); color: #fff; font-size: 0.88rem;
+}
+.reader.immersive .rd-banner { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; border-top: 1px solid var(--line); border-bottom: 0; background: rgba(20, 20, 28, 0.92); }
+.reader.fs { background: #000; }
