@@ -597,6 +597,33 @@ function renderFilters() {
   $("#btn-select").title = state.selecting ? "Salir de la selección" : "Seleccionar varios";
 }
 
+function ago(iso) {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d <= 0) return "hoy";
+  if (d === 1) return "ayer";
+  if (d < 30) return `hace ${d} días`;
+  return new Date(iso).toLocaleDateString("es-CL");
+}
+
+function renderPulse() {
+  const box = $("#pulse");
+  const books = state.books;
+  box.hidden = !books.length || !state.user;
+  if (box.hidden) return;
+  const week = Date.now() - 7 * 86400000;
+  const fresh = books.filter((b) => new Date(b.created_at).getTime() > week).length;
+  const people = new Set(books.map((b) => b.user_id)).size;
+  const last = books[0];
+  const card = (icon, value, label) =>
+    el("div", { class: "pulse-card" }, el("span", { class: "pulse-ico" }, icon), el("strong", {}, String(value)), el("span", { class: "pulse-lbl" }, label));
+  box.replaceChildren(
+    card("📚", books.length, "libros en la biblioteca"),
+    card("🆕", fresh, "nuevos esta semana"),
+    card("👥", people, people === 1 ? "colaborador" : "colaboradores"),
+    el("div", { class: "pulse-card wide" }, el("span", { class: "pulse-ico" }, "✨"), el("span", { class: "pulse-lbl" }, "Último agregado"), el("strong", { class: "pulse-last" }, last.title), el("span", { class: "pulse-lbl" }, ago(last.created_at)))
+  );
+}
+
 function render() {
   const rows = $("#rows");
   rows.replaceChildren();
@@ -608,6 +635,7 @@ function render() {
     return;
   }
   renderFilters();
+  renderPulse();
   updateSelbar();
   if (!hasBooks) {
     $("#hero").hidden = true;
@@ -1121,6 +1149,7 @@ $("#upload-form").addEventListener("submit", async (e) => {
   }
 
   const okCount = report.filter((r) => r.status === "ok").length;
+  if (okCount && state.profile?.role !== "admin") notifyUpload(okCount, report.filter((r) => r.status === "ok").map((r) => r.name.split("  (")[0]));
   const noteCount = report.filter((r) => r.status === "ok" && r.detail).length;
   // Primero lo que requiere atención, al final lo que salió bien.
   const order = { error: 0, big: 1, notpdf: 2, dup: 3, ok: 4 };
@@ -1587,14 +1616,33 @@ $("#contact-form").addEventListener("submit", async (e) => {
   toast("¡Mensaje enviado! Gracias por escribirme.", 6000);
 });
 
+/* Aviso al admin cuando otra persona sube libros */
+async function notifyUpload(count, titles) {
+  try {
+    const { data, error } = await sb
+      .from("notifications")
+      .insert({ username: state.profile?.username || state.user?.email || null, count, titles: titles.slice(0, 30) })
+      .select("id")
+      .single();
+    if (error || !data) return;
+    sb.functions?.invoke("notify-upload", { body: { notification_id: data.id } }).catch(() => {}); // correo (si está configurado)
+  } catch { /* el aviso es opcional */ }
+}
+
 /* Bandeja (solo admin) */
 
 let inbox = [];
 async function loadInbox() {
   if (state.profile?.role !== "admin") return;
-  const { data, error } = await sb.from("contact_messages").select("*").order("created_at", { ascending: false });
-  if (error) return;
-  inbox = data;
+  const [msgs, notes] = await Promise.all([
+    sb.from("contact_messages").select("*").order("created_at", { ascending: false }),
+    sb.from("notifications").select("*").order("created_at", { ascending: false }).limit(100),
+  ]);
+  if (msgs.error) return;
+  inbox = [
+    ...msgs.data.map((m) => ({ ...m, _t: "contact_messages" })),
+    ...((notes.data || []).filter((n) => n.user_id !== state.user?.id).map((n) => ({ ...n, _t: "notifications" }))),
+  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const unread = inbox.filter((m) => !m.read).length;
   $("#inbox-count").textContent = unread;
   $("#inbox-count").hidden = !unread;
@@ -1607,33 +1655,46 @@ function renderInbox() {
     return;
   }
   list.replaceChildren(
-    ...inbox.map((m) =>
-      el(
+    ...inbox.map((m) => {
+      const note = m._t === "notifications";
+      return el(
         "div",
         { class: "msg-item" + (m.read ? "" : " unread") },
-        el("strong", {}, m.name),
-        el("span", { class: "meta" }, `${m.email}${m.phone ? " · " + m.phone : ""} · ${new Date(m.created_at).toLocaleString("es-CL")}`),
-        el("p", {}, m.message),
+        el("strong", {}, note ? `📚 ${m.username || "Alguien"} subió ${m.count} libro(s)` : m.name),
+        el("span", { class: "meta" }, `${note ? "Novedad" : m.email + (m.phone ? " · " + m.phone : "")} · ${new Date(m.created_at).toLocaleString("es-CL")}`),
+        el("p", {}, note ? m.titles.slice(0, 8).join(" · ") + (m.count > 8 ? ` … y ${m.count - 8} más` : "") : m.message),
         el(
           "div",
           { class: "row-actions" },
-          el("a", { class: "btn ghost small", href: `mailto:${m.email}?subject=${encodeURIComponent("Re: tu mensaje en Netbook")}` }, "Responder"),
+          note ? null : el("a", { class: "btn ghost small", href: `mailto:${m.email}?subject=${encodeURIComponent("Re: tu mensaje en Netbook")}` }, "Responder"),
           el("button", { class: "btn ghost small", type: "button", onclick: async () => {
-            await sb.from("contact_messages").update({ read: !m.read }).eq("id", m.id);
+            await sb.from(m._t).update({ read: !m.read }).eq("id", m.id);
             await loadInbox();
             renderInbox();
           } }, m.read ? "Marcar sin leer" : "Marcar leído"),
           el("button", { class: "btn ghost small", type: "button", onclick: async () => {
-            if (!(await askConfirm("Eliminar mensaje", [el("p", {}, `¿Eliminar el mensaje de ${m.name}?`)], "Eliminar"))) return;
-            await sb.from("contact_messages").delete().eq("id", m.id);
+            if (!(await askConfirm("Eliminar mensaje", [el("p", {}, `¿Eliminar este aviso${m.name ? " de " + m.name : ""}?`)], "Eliminar"))) return;
+            await sb.from(m._t).delete().eq("id", m.id);
             await loadInbox();
             renderInbox();
           } }, "Eliminar")
         )
-      )
-    )
+      );
+    })
   );
 }
+
+let lastUnread = null;
+async function pollInbox() {
+  if (state.profile?.role !== "admin") return;
+  await loadInbox();
+  const unread = inbox.filter((m) => !m.read).length;
+  if (lastUnread !== null && unread > lastUnread) toast(`📨 Tienes ${unread - lastUnread} aviso(s) nuevo(s)`, 7000);
+  else if (lastUnread === null && unread) toast(`📨 Tienes ${unread} aviso(s) sin leer`, 7000);
+  lastUnread = unread;
+}
+setInterval(pollInbox, 120000);
+setTimeout(pollInbox, 2500);
 
 $("#btn-inbox").addEventListener("click", async () => {
   await loadInbox();
@@ -1924,7 +1985,7 @@ const countBy = (list, fn) => {
   return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
 };
 
-function openStats() {
+async function openStats() {
   const bs = state.books;
   const bytes = bs.reduce((a, b) => a + (b.size_bytes || 0), 0);
   const pages = bs.reduce((a, b) => a + (b.pages || 0), 0);
@@ -1940,9 +2001,16 @@ function openStats() {
     el("h3", {}, "Por etiqueta"), barList(allTags().slice(0, 8)),
     el("h3", {}, "Por categoría"), barList(countBy(bs, (b) => b.category)),
     top.length ? el("h3", {}, "Más leídos") : null,
-    top.length ? barList(top.map((b) => [b.title, b.opens])) : null
+    top.length ? barList(top.map((b) => [b.title, b.opens])) : null,
+    el("h3", {}, "Agregados recientemente"),
+    el("ul", { class: "recent" }, ...bs.slice(0, 6).map((b) => el("li", {}, el("span", {}, b.title), el("span", { class: "muted" }, ago(b.created_at)))))
   );
   $("#stats-modal").hidden = false;
+  if (state.profile?.role === "admin") {
+    const { data } = await sb.rpc("admin_users");
+    const who = (data || []).filter((u) => u.books > 0).sort((a, b) => b.books - a.books).map((u) => [u.username || u.full_name || u.email, Number(u.books)]);
+    if (who.length) $("#stats-body").append(el("h3", {}, "Aportes por colaborador"), barList(who));
+  }
 }
 
 function saveFile(name, text, type) {

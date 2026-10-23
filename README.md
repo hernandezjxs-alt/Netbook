@@ -112,3 +112,6 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 - 1 GB de almacenamiento en total y 50 MB por archivo.
 - El proyecto se pausa tras aproximadamente una semana sin actividad (se reactiva desde el panel).
 - Cada usuario ve solo sus propios libros.
+
+## Avisos de libros nuevos
+Cuando un usuario (no admin) termina de subir libros, la app crea un aviso en la tabla `notifications` y aparece en el 📨 del admin (con contador y un mensaje arriba). Si la Edge Function `notify-upload` tiene el secreto `RESEND_API_KEY`, también llega un correo a `NOTIFY_TO` (por defecto hernandezjxs@gmail.com). Sin ese secreto, el correo se omite y solo funciona el aviso dentro de la app.
