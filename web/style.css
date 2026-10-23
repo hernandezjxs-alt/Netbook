@@ -536,3 +536,6 @@ details.pick > .sugs { padding: 0.6rem; }
 :root[data-theme="light"] .toast { background: #20202c; color: #fff; }
 :root[data-theme="light"] .detail-actions .btn.on { color: #d32638; }
 :root[data-theme="light"] .rank, :root[data-theme="light"] .stat, :root[data-theme="light"] .card-edit { color: #fff; }
+
+.auth-extra { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+.topbar .app-install, .topbar .app-share { white-space: nowrap; }

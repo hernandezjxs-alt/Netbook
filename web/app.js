@@ -1877,6 +1877,62 @@ $("#st-json").addEventListener("click", async () => {
   toast("Respaldo de datos descargado (los PDFs no se incluyen)", 6000);
 });
 
+/* ---------- Compartir e instalar la app ---------- */
+
+const APP_URL = location.origin + location.pathname;
+let installEvent = null;
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installEvent = e;
+});
+window.addEventListener("appinstalled", () => {
+  installEvent = null;
+  document.querySelectorAll(".app-install").forEach((b) => (b.hidden = true));
+  toast("¡Netbook instalada!");
+});
+if (isStandalone()) document.querySelectorAll(".app-install").forEach((b) => (b.hidden = true));
+
+document.querySelectorAll(".app-share").forEach((b) =>
+  b.addEventListener("click", async () => {
+    const data = { title: "Netbook", text: "Biblioteca digital abierta para leer, compartir y descargar libros", url: APP_URL };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+        return;
+      }
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+      toast("Link de la app copiado. ¡Pégalo donde quieras compartirlo!", 5000);
+    } catch {
+      toast(APP_URL, 9000);
+    }
+  })
+);
+
+document.querySelectorAll(".app-install").forEach((b) =>
+  b.addEventListener("click", async () => {
+    if (installEvent) {
+      installEvent.prompt();
+      await installEvent.userChoice.catch(() => {});
+      installEvent = null;
+      return;
+    }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    await askConfirm(
+      "Instalar Netbook",
+      ios
+        ? [el("p", {}, "En iPhone o iPad (con Safari):"), el("ol", { class: "cf-list" }, [el("li", {}, "Toca el botón Compartir (el cuadrado con la flecha)."), el("li", {}, "Elige «Agregar a inicio»."), el("li", {}, "Toca «Agregar».")])]
+        : [el("p", {}, "En Android (Chrome):"), el("ol", { class: "cf-list" }, [el("li", {}, "Toca el menú ⋮ arriba a la derecha."), el("li", {}, "Elige «Instalar app» o «Agregar a la pantalla de inicio»."), el("li", {}, "Confirma con «Instalar».")]), el("p", { class: "muted" }, "Si no aparece la opción, abre este link directamente en Chrome.")],
+      "Entendido"
+    );
+  })
+);
+
 /* ---------- App instalable ---------- */
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
