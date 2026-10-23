@@ -115,3 +115,33 @@ create policy "admin elimina" on public.contact_messages for delete to authentic
 -- Identidad: nombre completo, RUT (validado con módulo 11) y consentimiento. Ver migración "profiles_identity_fields"
 -- en el panel de Supabase: columnas full_name, rut, consent_at; funciones valid_rut, norm_rut, admin_users;
 -- y handle_new_user actualizado para leer full_name / rut / consent de los metadatos del registro.
+
+-- Avisos de libros nuevos (migración "notifications_new_uploads")
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  username text,
+  kind text not null default 'upload',
+  count int not null check (count between 1 and 1000),
+  titles text[] not null default '{}',
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.notifications enable row level security;
+create policy "usuario crea su aviso" on public.notifications for insert to authenticated with check (user_id = auth.uid() and read = false);
+create policy "ver avisos propios o admin" on public.notifications for select to authenticated using (user_id = auth.uid() or public.is_admin());
+create policy "admin actualiza avisos" on public.notifications for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "admin elimina avisos" on public.notifications for delete to authenticated using (public.is_admin());
+
+-- Etiquetas y categorías oficiales creadas por el admin (migración "taxonomy_admin_lists")
+create table if not exists public.taxonomy (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('tag','category')),
+  name text not null check (char_length(name) between 2 and 60),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists taxonomy_kind_name_uq on public.taxonomy (kind, lower(name));
+alter table public.taxonomy enable row level security;
+create policy "todos ven la lista" on public.taxonomy for select to authenticated using (true);
+create policy "admin crea" on public.taxonomy for insert to authenticated with check (public.is_admin());
+create policy "admin elimina" on public.taxonomy for delete to authenticated using (public.is_admin());
