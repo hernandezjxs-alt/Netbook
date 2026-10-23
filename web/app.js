@@ -27,8 +27,33 @@ const state = {
   selected: new Set(),   // ids seleccionados
 };
 
-const DEFAULT_CATEGORIES = ["General", "Técnico", "Novelas", "Cuentos", "Negocios", "Finanzas", "Historia", "Ciencia", "Desarrollo personal", "Infantil", "Poesía", "Educación", "Salud", "Cocina", "Idiomas", "Arte"];
-const categoryOptions = () => [...new Set([...DEFAULT_CATEGORIES, ...state.books.map((b) => b.category).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "es"));
+const DEFAULT_CATEGORIES = [
+  "General", "Técnico", "Programación", "Datos y BI", "Tecnología", "Novelas", "Cuentos", "Poesía", "Teatro", "Ciencia ficción",
+  "Fantasía", "Terror", "Misterio y policial", "Romance", "Aventura", "Clásicos", "Literatura infantil", "Juvenil", "Cómics y manga",
+  "Historia", "Biografías", "Política", "Derecho", "Economía", "Finanzas", "Negocios", "Marketing", "Emprendimiento", "Liderazgo",
+  "Desarrollo personal", "Psicología", "Filosofía", "Religión y espiritualidad", "Educación", "Idiomas", "Ciencia", "Matemática",
+  "Física y química", "Biología y naturaleza", "Medicina", "Salud y bienestar", "Deportes", "Cocina", "Arte y diseño", "Música",
+  "Fotografía", "Arquitectura", "Ingeniería", "Viajes", "Manuales", "Revistas", "Apuntes y estudio", "Documentos",
+];
+const categoryOptions = () => [...new Set([...DEFAULT_CATEGORIES, ...state.books.map((b) => b.category).filter(Boolean)])];
+
+// Botones para elegir categoría con un toque (el desplegable nativo solo mostraba la opción escrita).
+function renderCategoryChips(container, input) {
+  const used = new Map();
+  for (const b of state.books) if (b.category) used.set(b.category, (used.get(b.category) || 0) + 1);
+  const names = [...used.keys()].sort((a, b) => used.get(b) - used.get(a));
+  const rest = DEFAULT_CATEGORIES.filter((c) => !used.has(c));
+  const mk = (c, mine) =>
+    el("button", {
+      type: "button",
+      class: "chip small" + (input.value.trim().toLowerCase() === c.toLowerCase() ? " active" : ""),
+      onclick: () => {
+        input.value = c;
+        renderCategoryChips(container, input);
+      },
+    }, mine ? `${c} (${used.get(c)})` : c);
+  container.replaceChildren(...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
+}
 
 const NONE_TAG = "__none__"; // filtro especial: libros sin etiquetas
 
@@ -677,7 +702,7 @@ function openUpload() {
   $("#up-title").required = true;
   lastAutoTags = "";
   renderSuggestions($("#up-tag-sugs"), $("#up-tags"));
-  $("#category-list").replaceChildren(...categoryOptions().map((c) => el("option", { value: c })));
+  renderCategoryChips($("#up-cat-sugs"), $("#up-category"));
   $("#upload-modal").hidden = false;
 }
 
@@ -685,6 +710,8 @@ function closeUpload() {
   $("#upload-modal").hidden = true;
 }
 
+$("#up-category").addEventListener("input", () => renderCategoryChips($("#up-cat-sugs"), $("#up-category")));
+$("#ed-category").addEventListener("input", () => renderCategoryChips($("#ed-cat-sugs"), $("#ed-category")));
 $("#btn-upload").addEventListener("click", openUpload);
 $("#btn-upload-empty").addEventListener("click", openUpload);
 $("#up-cancel").addEventListener("click", closeUpload);
@@ -1261,7 +1288,7 @@ function openEdit() {
   $("#ed-tags").value = tagsOf(b).join(", ");
   renderSuggestions($("#ed-tag-sugs"), $("#ed-tags"));
   $("#ed-status").textContent = "";
-  $("#category-list").replaceChildren(...categoryOptions().map((c) => el("option", { value: c })));
+  renderCategoryChips($("#ed-cat-sugs"), $("#ed-category"));
   $("#edit-modal").hidden = false;
 }
 

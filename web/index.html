@@ -192,9 +192,9 @@
         </label>
       </div>
       <label>Categoría (para todos los archivos de esta subida)
-        <input id="up-category" type="text" maxlength="60" list="category-list" value="General" required>
-        <datalist id="category-list"></datalist>
+        <input id="up-category" type="text" maxlength="60" value="General" required>
       </label>
+      <div id="up-cat-sugs" class="sugs cats"></div>
       <label>Etiquetas (rol o género, separadas por coma)
         <input id="up-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
       </label>
@@ -252,8 +252,9 @@
         <input id="ed-author" type="text" maxlength="200">
       </label>
       <label>Categoría
-        <input id="ed-category" type="text" maxlength="60" list="category-list" required>
+        <input id="ed-category" type="text" maxlength="60" required>
       </label>
+      <div id="ed-cat-sugs" class="sugs cats"></div>
       <label>Etiquetas (separadas por coma)
         <input id="ed-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
       </label>
