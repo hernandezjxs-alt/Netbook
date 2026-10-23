@@ -118,3 +118,6 @@ Cuando un usuario (no admin) termina de subir libros, la app crea un aviso en la
 
 ## Etiquetas y categorias oficiales
 El admin las crea desde el icono 🏷️ (tabla `taxonomy`, solo el admin escribe, todos leen). Aparecen en los desplegables de subir y editar para todos.
+
+## Subrayados y notas
+En el lector se selecciona texto y aparece "Resaltar" / "Resaltar con nota". Se guardan en `highlights` (rectángulos relativos a la página, así escalan con el zoom) y solo los ve su dueño (RLS). El botón 🖍️ lista todos los de un libro.

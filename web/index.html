@@ -370,6 +370,7 @@
         <button id="rd-zoom-in" class="icon" type="button" aria-label="Acercar">+</button>
         <button id="rd-spread" class="icon" type="button" aria-label="Ver dos páginas" title="Dos páginas">📖</button>
         <button id="rd-full" class="icon" type="button" aria-label="Pantalla completa" title="Pantalla completa">⛶</button>
+        <button id="rd-hl" class="icon" type="button" aria-label="Mis subrayados y notas" title="Mis subrayados y notas">🖍️</button>
         <button id="rd-bm" class="icon" type="button" aria-label="Marcadores" title="Marcadores">🔖</button>
         <button id="rd-mode" class="icon" type="button" aria-label="Modo de lectura" title="Modo de lectura (normal, sepia, noche)">🌗</button>
         <button id="rd-share" class="icon" type="button" aria-label="Compartir enlace" title="Compartir enlace (válido 7 días)">🔗</button>
@@ -385,8 +386,8 @@
     <div id="stage" class="stage">
       <p id="rd-status" class="muted"></p>
       <div id="pages" class="pages">
-        <canvas id="page-canvas"></canvas>
-        <canvas id="page-canvas-2" hidden></canvas>
+        <div class="pg" id="pg1" hidden><canvas id="page-canvas"></canvas><div class="hl-layer"></div><div class="textLayer"></div></div>
+        <div class="pg" id="pg2" hidden><canvas id="page-canvas-2" hidden></canvas><div class="hl-layer"></div><div class="textLayer"></div></div>
       </div>
     </div>
   </div>
@@ -397,6 +398,34 @@
     <button id="sel-all" class="btn ghost small" type="button">Todos los visibles</button>
     <button id="sel-tag" class="btn primary small" type="button" disabled>Etiquetar</button>
     <button id="sel-cancel" class="btn ghost small" type="button">Cancelar</button>
+  </div>
+
+  <!-- Subrayados -->
+  <div id="hl-bar" class="hl-bar" hidden>
+    <button id="hl-do" class="btn primary small" type="button">🟡 Resaltar</button>
+    <button id="hl-note" class="btn ghost small" type="button">📝 Resaltar con nota</button>
+  </div>
+  <div id="note-modal" class="modal top" hidden>
+    <form id="note-form" class="modal-card contact-card">
+      <h2 id="nt-title">Nota</h2>
+      <blockquote id="nt-quote" class="hl-quote"></blockquote>
+      <label>Tu nota (solo tú la ves)
+        <textarea id="nt-text" rows="4" maxlength="1000" placeholder="Escribe aquí tu nota…"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="nt-del" class="btn ghost danger" type="button" hidden>Quitar subrayado</button>
+        <button id="nt-cancel" class="btn ghost" type="button">Cancelar</button>
+        <button class="btn primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+  <div id="hl-modal" class="modal top" hidden>
+    <div class="modal-card contact-card">
+      <h2>🖍️ Mis subrayados y notas</h2>
+      <p class="muted">Solo tú ves estos subrayados.</p>
+      <div id="hl-list" class="inbox"></div>
+      <div class="modal-actions"><button id="hl-close" class="btn ghost" type="button">Cerrar</button></div>
+    </div>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>

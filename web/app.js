@@ -1236,6 +1236,8 @@ async function openReader(book, opts = {}) {
   $("#rd-title").textContent = book.title;
   $("#rd-status").textContent = "Cargando…";
   $("#page-canvas").hidden = true;
+  $("#pg1").hidden = true;
+  reader.hls = [];
   updateReaderUI();
 
   const { data, error } = await sb.storage.from("pdfs").createSignedUrl(book.pdf_path, 3600);
@@ -1275,6 +1277,8 @@ async function openReader(book, opts = {}) {
   }
   $("#rd-status").textContent = "";
   $("#page-canvas").hidden = false;
+  $("#pg1").hidden = false;
+  if (!reader.preview) await loadHighlights();
   await renderPage();
 }
 
@@ -1288,6 +1292,204 @@ async function bumpCounter(book, field) {
     }
   } catch { /* sin conexión */ }
 }
+
+
+/* ---------- Subrayados y notas (privados de cada usuario) ---------- */
+
+reader.hls = [];
+reader.pageNums = [];
+const pgEls = () => [$("#pg1"), $("#pg2")];
+
+async function loadHighlights() {
+  reader.hls = [];
+  const b = reader.book;
+  if (!b) return;
+  try {
+    const { data, error } = await sb.from("highlights").select("*").eq("book_id", b.id).order("page");
+    if (!error && data) reader.hls = data;
+  } catch { /* sin la tabla, el lector funciona igual */ }
+}
+
+async function buildTextLayers(pages, nums, scale, seq, token) {
+  reader.pageNums = nums;
+  const els = pgEls();
+  for (let i = 0; i < pages.length; i++) {
+    const tl = els[i].querySelector(".textLayer");
+    tl.replaceChildren();
+    const vp = pages[i].getViewport({ scale });
+    tl.style.setProperty("--scale-factor", String(vp.scale));
+    tl.style.width = `${vp.width}px`;
+    tl.style.height = `${vp.height}px`;
+    try {
+      const tc = await pages[i].getTextContent();
+      if (token !== reader.token || seq !== reader.seq) return;
+      const t = pdfjsLib.renderTextLayer({ textContent: tc, textContentSource: tc, container: tl, viewport: vp, textDivs: [] });
+      await t.promise;
+    } catch { /* PDF escaneado o sin texto: simplemente no hay qué seleccionar */ }
+  }
+  drawHighlights();
+}
+
+function drawHighlights() {
+  const els = pgEls();
+  els.forEach((pg, i) => {
+    const layer = pg.querySelector(".hl-layer");
+    layer.replaceChildren();
+    const num = reader.pageNums[i];
+    if (!num || pg.hidden) return;
+    for (const h of reader.hls.filter((x) => x.page === num)) {
+      for (const r of h.rects) {
+        layer.append(el("div", { class: "hl" + (h.note ? " has-note" : ""), style: `left:${r.x * 100}%;top:${r.y * 100}%;width:${r.w * 100}%;height:${r.h * 100}%` }));
+      }
+    }
+  });
+}
+
+// Lee la selección actual y la convierte en rectángulos relativos a la página (0 a 1).
+function currentSelection() {
+  const sel = window.getSelection?.();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  const tl = node?.closest?.("#pages .textLayer");
+  if (!tl) return null;
+  const pg = tl.closest(".pg");
+  const idx = pgEls().indexOf(pg);
+  const page = reader.pageNums[idx];
+  const text = sel.toString().replace(/\s+/g, " ").trim().slice(0, 1500);
+  if (!page || !text) return null;
+  const pb = pg.getBoundingClientRect();
+  const raw = [...range.getClientRects()].filter((r) => r.width > 2 && r.height > 2 && r.right > pb.left && r.left < pb.right && r.bottom > pb.top && r.top < pb.bottom);
+  if (!raw.length) return null;
+  const hs = raw.map((r) => r.height).sort((a, b) => a - b);
+  const med = hs[Math.floor(hs.length / 2)];
+  const rects = [];
+  for (const r of raw) {
+    if (r.height > med * 2.2 || r.width > pb.width * 0.98) continue; // contenedores, no líneas de texto
+    const q = { x: (r.left - pb.left) / pb.width, y: (r.top - pb.top) / pb.height, w: r.width / pb.width, h: r.height / pb.height };
+    const dup = rects.some((o) => Math.abs(o.x - q.x) < 0.004 && Math.abs(o.y - q.y) < 0.004 && Math.abs(o.w - q.w) < 0.004);
+    if (!dup) rects.push({ x: +q.x.toFixed(4), y: +q.y.toFixed(4), w: +q.w.toFixed(4), h: +q.h.toFixed(4) });
+  }
+  return rects.length ? { page, text, rects } : null;
+}
+
+let pendingSel = null;
+function hideHlBar() { $("#hl-bar").hidden = true; }
+document.addEventListener("selectionchange", () => {
+  if ($("#reader").hidden || reader.preview) return hideHlBar();
+  pendingSel = currentSelection();
+  $("#hl-bar").hidden = !pendingSel;
+});
+$("#hl-bar").addEventListener("mousedown", (e) => e.preventDefault()); // conserva la selección al tocar el botón
+$("#hl-bar").addEventListener("pointerdown", (e) => e.preventDefault());
+
+async function saveHighlight(sel, note) {
+  const b = reader.book;
+  if (!b || !sel) return;
+  const { data, error } = await sb.from("highlights").insert({ book_id: b.id, page: sel.page, rects: sel.rects, text: sel.text, note: note || null }).select().single();
+  if (error || !data) {
+    toast(`No se pudo guardar el subrayado: ${error?.message || "intenta de nuevo"}`);
+    return;
+  }
+  reader.hls.push(data);
+  window.getSelection()?.removeAllRanges();
+  hideHlBar();
+  drawHighlights();
+  toast(note ? "Subrayado y nota guardados" : "Subrayado guardado");
+}
+
+$("#hl-do").addEventListener("click", () => saveHighlight(pendingSel, null));
+
+let noteCtx = null; // { sel } para uno nuevo, { hl } para editar
+function openNote(ctx) {
+  noteCtx = ctx;
+  const text = ctx.hl ? ctx.hl.text : ctx.sel.text;
+  $("#nt-title").textContent = ctx.hl ? "Subrayado" : "Resaltar con nota";
+  $("#nt-quote").textContent = `“${text.length > 280 ? text.slice(0, 280) + "…" : text}”`;
+  $("#nt-text").value = ctx.hl?.note || "";
+  $("#nt-del").hidden = !ctx.hl;
+  $("#note-modal").hidden = false;
+  setTimeout(() => $("#nt-text").focus(), 50);
+}
+$("#hl-note").addEventListener("click", () => { if (pendingSel) openNote({ sel: pendingSel }); });
+$("#nt-cancel").addEventListener("click", () => ($("#note-modal").hidden = true));
+$("#note-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const note = $("#nt-text").value.trim();
+  const ctx = noteCtx;
+  $("#note-modal").hidden = true;
+  if (!ctx) return;
+  if (ctx.hl) {
+    const { error } = await sb.from("highlights").update({ note: note || null }).eq("id", ctx.hl.id);
+    if (error) return toast(`No se pudo guardar la nota: ${error.message}`);
+    ctx.hl.note = note || null;
+    drawHighlights();
+    if (!$("#hl-modal").hidden) renderHlList();
+    toast("Nota guardada");
+  } else {
+    await saveHighlight(ctx.sel, note);
+  }
+});
+async function removeHighlight(h) {
+  const { error } = await sb.from("highlights").delete().eq("id", h.id);
+  if (error) return toast(`No se pudo quitar: ${error.message}`);
+  reader.hls = reader.hls.filter((x) => x.id !== h.id);
+  drawHighlights();
+  if (!$("#hl-modal").hidden) renderHlList();
+  toast("Subrayado quitado");
+}
+$("#nt-del").addEventListener("click", async () => {
+  const h = noteCtx?.hl;
+  $("#note-modal").hidden = true;
+  if (h) await removeHighlight(h);
+});
+
+// Tocar un texto ya subrayado abre su nota.
+$("#pages").addEventListener("click", (e) => {
+  if (reader.preview) return;
+  if (!window.getSelection().isCollapsed) { e.stopImmediatePropagation(); return; } // al seleccionar no se ocultan los botones
+  const pg = e.target.closest(".pg");
+  if (!pg) return;
+  const idx = pgEls().indexOf(pg);
+  const num = reader.pageNums[idx];
+  const pb = pg.getBoundingClientRect();
+  const x = (e.clientX - pb.left) / pb.width;
+  const y = (e.clientY - pb.top) / pb.height;
+  const hit = reader.hls.find((h) => h.page === num && h.rects.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h));
+  if (hit) {
+    e.stopImmediatePropagation();
+    openNote({ hl: hit });
+  }
+});
+
+function renderHlList() {
+  const list = $("#hl-list");
+  const sorted = [...reader.hls].sort((a, b) => a.page - b.page || a.rects[0].y - b.rects[0].y);
+  if (!sorted.length) {
+    list.replaceChildren(el("p", { class: "muted" }, "Aún no has subrayado nada. Selecciona un texto mientras lees y toca “Resaltar”."));
+    return;
+  }
+  list.replaceChildren(
+    ...sorted.map((h) =>
+      el("div", { class: "msg-item" },
+        el("strong", {}, `Página ${h.page}`),
+        el("p", { class: "hl-quote" }, `“${h.text.length > 200 ? h.text.slice(0, 200) + "…" : h.text}”`),
+        h.note ? el("p", {}, `📝 ${h.note}`) : null,
+        el("div", { class: "row-actions" },
+          el("button", { class: "btn ghost small", type: "button", onclick: () => { $("#hl-modal").hidden = true; go(h.page); } }, "Ir a la página"),
+          el("button", { class: "btn ghost small", type: "button", onclick: () => openNote({ hl: h }) }, h.note ? "Editar nota" : "Agregar nota"),
+          el("button", { class: "btn ghost small", type: "button", onclick: () => removeHighlight(h) }, "Quitar")
+        )
+      )
+    )
+  );
+}
+$("#rd-hl").addEventListener("click", () => {
+  if (reader.preview) return toast("En la vista previa no se pueden guardar subrayados.");
+  renderHlList();
+  $("#hl-modal").hidden = false;
+});
+$("#hl-close").addEventListener("click", () => ($("#hl-modal").hidden = true));
 
 async function renderPage() {
   const { pdf, token } = reader;
@@ -1305,6 +1507,7 @@ async function renderPage() {
   const pages = await Promise.all(nums.map((n) => pdf.getPage(n)));
   if (token !== reader.token || seq !== reader.seq) return;
 
+  hideHlBar();
   const stage = $("#stage");
   const gap = 8;
   const base = pages[0].getViewport({ scale: 1 });
@@ -1317,6 +1520,7 @@ async function renderPage() {
   const dpr = window.devicePixelRatio || 1;
   const canvases = [$("#page-canvas"), $("#page-canvas-2")];
   canvases[1].hidden = nums.length < 2;
+  $("#pg2").hidden = nums.length < 2;
 
   const tasks = pages.map((pg, i) => {
     const viewport = pg.getViewport({ scale: scale * dpr });
@@ -1335,6 +1539,7 @@ async function renderPage() {
     return;
   }
   if (token !== reader.token || seq !== reader.seq) return;
+  if (!reader.preview) await buildTextLayers(pages, nums, scale, seq, token);
 
   reader.ready = true;
   updateReaderUI();
@@ -1585,6 +1790,7 @@ $("#stage").addEventListener("touchstart", (e) => {
 }, { passive: true });
 $("#stage").addEventListener("touchend", (e) => {
   if (touchX === null || reader.zoom > 1) return;
+  if (window.getSelection && !window.getSelection().isCollapsed) { touchX = null; return; } // seleccionando texto
   const dx = e.changedTouches[0].clientX - touchX;
   touchX = null;
   if (Math.abs(dx) > 70) stepBy(dx < 0 ? 1 : -1);

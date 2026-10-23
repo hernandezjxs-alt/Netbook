@@ -145,3 +145,22 @@ alter table public.taxonomy enable row level security;
 create policy "todos ven la lista" on public.taxonomy for select to authenticated using (true);
 create policy "admin crea" on public.taxonomy for insert to authenticated with check (public.is_admin());
 create policy "admin elimina" on public.taxonomy for delete to authenticated using (public.is_admin());
+
+-- Subrayados y notas privadas del lector (migración "highlights_private")
+create table if not exists public.highlights (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  book_id uuid not null references public.books(id) on delete cascade,
+  page int not null check (page >= 1),
+  rects jsonb not null,
+  text text not null check (char_length(text) between 1 and 1500),
+  note text check (note is null or char_length(note) <= 1000),
+  color text not null default 'yellow',
+  created_at timestamptz not null default now()
+);
+create index if not exists highlights_book_user_idx on public.highlights (book_id, user_id, page);
+alter table public.highlights enable row level security;
+create policy "ver mis subrayados" on public.highlights for select to authenticated using (user_id = auth.uid());
+create policy "crear mis subrayados" on public.highlights for insert to authenticated with check (user_id = auth.uid());
+create policy "editar mis subrayados" on public.highlights for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "borrar mis subrayados" on public.highlights for delete to authenticated using (user_id = auth.uid());
