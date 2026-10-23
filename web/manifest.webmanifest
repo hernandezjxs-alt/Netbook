@@ -1,7 +1,7 @@
 {
   "name": "Netbook",
   "short_name": "Netbook",
-  "description": "Tu biblioteca privada de PDFs",
+  "description": "Biblioteca digital abierta para leer, compartir y descargar libros",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

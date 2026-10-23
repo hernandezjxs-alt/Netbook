@@ -194,7 +194,7 @@ function setAuthMode(mode) {
   $("#btn-submit").textContent = signup ? "Crear cuenta" : "Entrar";
   $("#btn-mode").textContent = signup ? "Ya tengo cuenta" : "Crear cuenta";
   $("#btn-forgot").hidden = signup;
-  $("#auth-sub").textContent = signup ? "Crea tu cuenta" : "Tu biblioteca de PDFs";
+  $("#auth-sub").textContent = signup ? "Crea tu cuenta" : "Biblioteca digital abierta para leer, compartir y descargar libros";
   $("#password").autocomplete = signup ? "new-password" : "current-password";
   $("#auth-msg").textContent = "";
 }

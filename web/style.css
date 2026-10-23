@@ -400,3 +400,6 @@ details.pick > .sugs { padding: 0.6rem; }
 }
 .card-edit:hover, .card-edit:focus-visible { background: var(--red); }
 .stat { right: auto; left: 6px; top: 38px; }
+
+.site-footer .tagline { flex-basis: 100%; color: var(--text); font-weight: 600; }
+#auth-sub { line-height: 1.4; }

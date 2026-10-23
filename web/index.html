@@ -4,14 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0b10">
-  <meta name="description" content="Netbook: tu biblioteca privada de PDFs.">
+  <meta name="description" content="Netbook: Biblioteca digital abierta para leer, compartir y descargar libros.">
+  <meta property="og:title" content="Netbook">
+  <meta property="og:description" content="Biblioteca digital abierta para leer, compartir y descargar libros.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <title>Netbook</title>
+  <title>Netbook · Biblioteca digital</title>
   <link rel="stylesheet" href="style.css?v=__V__">
 </head>
 <body>
@@ -20,7 +22,7 @@
   <main id="auth" class="auth" hidden>
     <form id="auth-form" class="auth-card" autocomplete="on">
       <h1 class="logo">NETBOOK</h1>
-      <p id="auth-sub" class="muted">Tu biblioteca de PDFs</p>
+      <p id="auth-sub" class="muted">Biblioteca digital abierta para leer, compartir y descargar libros</p>
       <div id="signup-fields" class="fields" hidden>
         <label>Nombre completo
           <input id="full-name" type="text" maxlength="100" autocomplete="name">
@@ -95,6 +97,7 @@
   </div>
 
   <footer class="site-footer">
+    <span class="tagline">Biblioteca digital abierta para leer, compartir y descargar libros</span>
     <span>Elaborado por <strong>JH</strong> · Todos los derechos reservados · Octubre 2026</span>
     <span><button class="linklike" type="button" data-legal="terms">Términos</button> ·
     <button class="linklike" type="button" data-legal="privacy">Privacidad</button> ·
