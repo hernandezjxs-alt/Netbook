@@ -335,9 +335,10 @@ async function loadProfile() {
 
 async function refresh() {
   loadProfile();
-  const [booksRes, progRes] = await Promise.all([
+  const [booksRes, progRes, favRes] = await Promise.all([
     sb.from("books").select("*").order("created_at", { ascending: false }),
     sb.from("reading_progress").select("book_id,last_page,updated_at"),
+    sb.from("favorites").select("book_id"),
   ]);
   const err = booksRes.error || progRes.error;
   if (err) {
@@ -346,7 +347,8 @@ async function refresh() {
     toast(`No se pudo cargar la biblioteca: ${err.message}`);
     return;
   }
-  state.books = booksRes.data;
+  const favs = new Set((favRes.data || []).map((f) => f.book_id)); // (si falla, solo no se ven los favoritos)
+  state.books = booksRes.data.map((b) => ({ ...b, favorite: favs.has(b.id) }));
   state.loading = false;
   state.progress = new Map(progRes.data.map((p) => [p.book_id, p]));
   await loadCovers();
@@ -383,7 +385,7 @@ function cardEl(b, rank = null, stat = null) {
     cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, b.title),
     el("div", { class: "card-info" }, el("strong", {}, b.title), el("span", {}, b.author || b.category)),
     el("span", { class: "check-badge", "aria-hidden": "true" }, "✓"),
-    state.selecting ? null : el("span", {
+    state.selecting || !canEdit(b) ? null : el("span", {
       class: "card-edit", role: "button", tabindex: "0", title: "Editar", "aria-label": `Editar ${b.title}`,
       onclick: (ev) => { ev.stopPropagation(); openEdit(b); },
       onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); openEdit(b); } },
@@ -455,6 +457,8 @@ function renderHero(resuming) {
 /* ---------- Etiquetas y filtros ---------- */
 
 const tagsOf = (b) => b.tags || [];
+// Solo el dueño del libro (o el admin) puede editarlo, etiquetarlo o eliminarlo.
+const canEdit = (b) => !!state.user && (b.user_id === state.user.id || state.profile?.role === "admin");
 
 // [[etiqueta, cantidad], ...] ordenadas por cantidad y luego alfabéticamente.
 function allTags() {
@@ -552,7 +556,7 @@ function listItemEl(b) {
       tagsOf(b).length ? el("span", { class: "li-tags" }, tagsOf(b).join(" · ")) : null,
       pct > 0 ? el("div", { class: "bar inline" }, el("i", { style: `width:${pct}%` })) : null
     ),
-    state.selecting ? null : el("button", { class: "icon", type: "button", title: "Editar", "aria-label": "Editar", onclick: (ev) => { ev.stopPropagation(); openEdit(b); } }, "✎")
+    state.selecting || !canEdit(b) ? null : el("button", { class: "icon", type: "button", title: "Editar", "aria-label": "Editar", onclick: (ev) => { ev.stopPropagation(); openEdit(b); } }, "✎")
   );
 }
 
@@ -573,7 +577,7 @@ function renderFilters() {
   const nav = $("#filters");
   nav.hidden = !state.books.length;
   if (!state.books.length) return;
-  const untagged = state.books.filter((b) => !tagsOf(b).length).length;
+  const untagged = state.books.filter((b) => !tagsOf(b).length && canEdit(b)).length;
   const favs = state.books.filter((b) => b.favorite).length;
   $("#sort").value = state.sort;
   $("#btn-view").textContent = state.view === "list" ? "▦" : "☰";
@@ -716,7 +720,7 @@ $("#tag-form").addEventListener("submit", async (e) => {
     return;
   }
   const updates = state.books
-    .filter((b) => state.selected.has(b.id))
+    .filter((b) => state.selected.has(b.id) && canEdit(b))
     .map((book) => ({ book, tags: unionTags(tagsOf(book), added) }));
   const err = await applyTagUpdates(updates);
   if (err) {
@@ -731,7 +735,7 @@ $("#tag-form").addEventListener("submit", async (e) => {
 
 $("#btn-autotag").addEventListener("click", async () => {
   try {
-    const untagged = state.books.filter((b) => !tagsOf(b).length);
+    const untagged = state.books.filter((b) => !tagsOf(b).length && canEdit(b));
     const updates = untagged
       .map((book) => ({ book, tags: NetbookMeta.suggestTags(book.title) }))
       .filter((u) => u.tags.length);
@@ -1044,6 +1048,7 @@ async function uploadOne(file, meta) {
       tags,
       pages,
       size_bytes: file.size,
+      is_public: meta.isPublic !== false,
       pdf_path: pdfPath,
       cover_path: coverPath,
     });
@@ -1088,12 +1093,13 @@ $("#upload-form").addEventListener("submit", async (e) => {
       upStatus(`Subiendo ${i + 1} de ${files.length}: ${f.name}`);
       let meta;
       if (multi) {
-        meta = { auto: true, known, category, userTags, autoTags };
+        meta = { auto: true, known, category, userTags, autoTags, isPublic: $("#up-public").checked };
       } else {
         const title = $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name);
         meta = {
           auto: false,
           known,
+          isPublic: $("#up-public").checked,
           title,
           author: $("#up-author").value.trim() || null,
           category,
@@ -1215,10 +1221,11 @@ async function openReader(book, opts = {}) {
 // Suma 1 a "opens" o "downloads" (falla en silencio: no debe estorbar la lectura).
 async function bumpCounter(book, field) {
   try {
-    const patch = { [field]: (book[field] || 0) + 1 };
-    if (field === "opens") patch.last_opened_at = new Date().toISOString();
-    const { error } = await sb.from("books").update(patch).eq("id", book.id);
-    if (!error) Object.assign(book, patch);
+    const { error } = await sb.rpc("bump_book_counter", { p_book: book.id, p_field: field });
+    if (!error) {
+      book[field] = (book[field] || 0) + 1;
+      if (field === "opens") book.last_opened_at = new Date().toISOString();
+    }
   } catch { /* sin conexión */ }
 }
 
@@ -1431,6 +1438,7 @@ function openEdit(book) {
   const b = book && book.id ? book : reader.book;
   if (!b) return;
   editing = b;
+  $("#ed-public").checked = b.is_public !== false;
   $("#ed-title").value = b.title;
   $("#ed-author").value = b.author || "";
   $("#ed-category").value = b.category || "General";
@@ -1456,6 +1464,7 @@ $("#edit-form").addEventListener("submit", async (e) => {
     title: $("#ed-title").value.trim(),
     author: $("#ed-author").value.trim() || null,
     category: $("#ed-category").value.trim() || "General",
+    is_public: $("#ed-public").checked,
     tags: normTags($("#ed-tags").value),
   };
   const { error } = await sb.from("books").update(patch).eq("id", b.id);
@@ -1732,6 +1741,9 @@ function renderDetail() {
   $("#dt-read").textContent = pct > 0 && pct < 100 ? "▶ Continuar" : "▶ Leer";
   $("#dt-fav").textContent = b.favorite ? "♥ En favoritos" : "♡ Favorito";
   $("#dt-fav").classList.toggle("on", !!b.favorite);
+  $("#dt-edit").hidden = !canEdit(b);
+  $("#dt-delete").hidden = !canEdit(b);
+  if (b.user_id === state.user?.id) $("#dt-meta").textContent += ` · ${b.is_public === false ? "🔒 Privado" : "🌐 Compartido"}`;
 }
 
 function openDetail(b) {
@@ -1746,7 +1758,9 @@ function closeDetail() {
 
 async function toggleFavorite(b) {
   const next = !b.favorite;
-  const { error } = await sb.from("books").update({ favorite: next }).eq("id", b.id);
+  const { error } = next
+    ? await sb.from("favorites").insert({ book_id: b.id })
+    : await sb.from("favorites").delete().eq("book_id", b.id);
   if (error) {
     toast(`No se pudo guardar el favorito: ${error.message}`);
     return;

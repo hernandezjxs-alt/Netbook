@@ -96,3 +96,7 @@ alter table public.bookmarks enable row level security;
 create policy "marcadores propios: leer" on public.bookmarks for select to authenticated using (auth.uid() = user_id);
 create policy "marcadores propios: crear" on public.bookmarks for insert to authenticated with check (auth.uid() = user_id);
 create policy "marcadores propios: borrar" on public.bookmarks for delete to authenticated using (auth.uid() = user_id);
+
+-- Biblioteca compartida (migración "shared_library"): books.is_public, políticas de lectura para todos los
+-- usuarios con sesión (libros públicos y sus archivos), moderación por admin, tabla favorites y la función
+-- bump_book_counter(p_book, p_field) para contar lecturas y descargas. Ver el panel de Supabase > Migrations.

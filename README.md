@@ -79,6 +79,14 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 - Lector: flechas del teclado o deslizar en el móvil, zoom, y el progreso se guarda solo.
 - Para eliminar un libro, ábrelo y usa el botón 🗑.
 
+## Biblioteca compartida
+
+- Todos los libros son **públicos para los usuarios con sesión** (se pueden leer, descargar y compartir). Al subir o editar un libro
+  se puede desmarcar «Compartir con los demás usuarios» para que solo lo vea su dueño.
+- Cada usuario ve sus propios favoritos, progreso y marcadores. Solo el dueño (o el admin) edita, etiqueta o elimina un libro.
+- Como el registro es abierto, cualquiera que cree cuenta podrá ver los libros públicos: si prefieres controlar quién entra,
+  desactiva *Allow new users to sign up* en Supabase (Authentication) después de crear las cuentas que necesites.
+
 ## Experiencia de lectura
 
 - Tocar un libro abre su **detalle** (portada, datos, progreso, favorito, compartir, descargar, editar, eliminar).
