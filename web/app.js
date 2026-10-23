@@ -58,6 +58,26 @@ function toast(msg, ms = 4500) {
 
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
 
+// Confirmación propia: devuelve Promise<boolean>. (confirm() del navegador no funciona bien en algunos móviles.)
+function askConfirm(title, nodes, okLabel = "Aceptar") {
+  return new Promise((resolve) => {
+    $("#cf-title").textContent = title;
+    $("#cf-body").replaceChildren(...nodes);
+    $("#cf-ok").textContent = okLabel;
+    $("#confirm-modal").hidden = false;
+    const finish = (v) => {
+      $("#confirm-modal").hidden = true;
+      $("#cf-ok").onclick = null;
+      $("#cf-cancel").onclick = null;
+      resolve(v);
+    };
+    $("#cf-ok").onclick = () => finish(true);
+    $("#cf-cancel").onclick = () => finish(false);
+  });
+}
+
+const fmtMB = (bytes) => `${(bytes / 1048576).toFixed(bytes >= 10 * 1048576 ? 0 : 1)} MB`;
+
 /* ---------- Autenticación ---------- */
 
 async function doAuth(mode) {
@@ -450,27 +470,39 @@ $("#tag-form").addEventListener("submit", async (e) => {
 });
 
 $("#btn-autotag").addEventListener("click", async () => {
-  const untagged = state.books.filter((b) => !tagsOf(b).length);
-  const updates = untagged
-    .map((book) => ({ book, tags: NetbookMeta.suggestTags(book.title) }))
-    .filter((u) => u.tags.length);
-  if (!updates.length) {
-    toast("Ningún título sin etiqueta coincide con las reglas. Etiquétalos con «Seleccionar».", 7000);
-    return;
+  try {
+    const untagged = state.books.filter((b) => !tagsOf(b).length);
+    const updates = untagged
+      .map((book) => ({ book, tags: NetbookMeta.suggestTags(book.title) }))
+      .filter((u) => u.tags.length);
+    if (!updates.length) {
+      toast("Ningún título sin etiqueta coincide con las reglas. Etiquétalos con «Seleccionar».", 7000);
+      return;
+    }
+    const counts = new Map();
+    for (const u of updates) for (const t of u.tags) counts.set(t, (counts.get(t) || 0) + 1);
+    const ok = await askConfirm(
+      "Etiquetar automático",
+      [
+        el("p", {}, `Se etiquetarán ${updates.length} de ${untagged.length} libros sin etiqueta, según palabras de su título:`),
+        el("ul", { class: "cf-list" }, [...counts.entries()].sort((x, y) => y[1] - x[1]).map(([t, n]) => el("li", {}, `${t}: ${n}`))),
+        el("p", { class: "muted" }, "Un libro puede recibir varias. Podrás corregirlas después."),
+      ],
+      "Etiquetar"
+    );
+    if (!ok) return;
+    toast("Guardando etiquetas…", 30000);
+    const err = await applyTagUpdates(updates);
+    render();
+    toast(
+      err
+        ? `Se interrumpió: ${err}`
+        : `${updates.length} libro(s) etiquetados. Quedan ${untagged.length - updates.length} sin etiqueta.`,
+      7000
+    );
+  } catch (err) {
+    toast(`No se pudo etiquetar: ${err?.message || err}`, 9000);
   }
-  const ok = confirm(
-    `Se etiquetarán ${updates.length} de ${untagged.length} libros sin etiqueta según palabras de su título. ` +
-      "Podrás corregirlas después. ¿Continuar?"
-  );
-  if (!ok) return;
-  const err = await applyTagUpdates(updates);
-  render();
-  toast(
-    err
-      ? `Se interrumpió: ${err}`
-      : `${updates.length} libro(s) etiquetados. Quedan ${untagged.length - updates.length} sin etiqueta.`,
-    7000
-  );
 });
 
 $("#search").addEventListener("input", (e) => {
@@ -480,12 +512,17 @@ $("#search").addEventListener("input", (e) => {
 
 /* ---------- Subida ---------- */
 
+let lastReport = []; // [{ name, status, detail }]
+
 function openUpload() {
   $("#upload-form").reset();
   $("#up-category").value = "General";
   upStatus("");
+  clearReport();
+  $("#up-submit").hidden = false;
   $("#up-submit").disabled = false;
   $("#up-cancel").disabled = false;
+  $("#up-cancel").textContent = "Cancelar";
   $("#single-fields").hidden = false;
   $("#up-title").required = true;
   lastAutoTags = "";
@@ -509,6 +546,85 @@ function upStatus(text, info = true) {
   s.classList.toggle("info", info);
 }
 
+/* Informe por archivo */
+
+const ICONS = { ok: "✓", dup: "↺", big: "✕", notpdf: "✕", error: "✕" };
+const LABELS = { ok: "subido(s)", dup: "repetido(s)", big: "demasiado pesado(s)", notpdf: "no es PDF", error: "con error" };
+
+function clearReport() {
+  lastReport = [];
+  $("#up-summary").hidden = true;
+  $("#up-report").hidden = true;
+  $("#up-report").replaceChildren();
+  $("#up-copy").hidden = true;
+}
+
+function renderReport(items, { final = false } = {}) {
+  lastReport = items;
+  const counts = {};
+  for (const it of items) counts[it.status] = (counts[it.status] || 0) + 1;
+  const parts = Object.keys(LABELS).filter((k) => counts[k]).map((k) => `${counts[k]} ${LABELS[k]}`);
+  const sum = $("#up-summary");
+  sum.hidden = !items.length;
+  sum.textContent = `${final ? "Resultado" : "Revisión"} (${items.length} archivo${items.length === 1 ? "" : "s"}): ${parts.join(" · ")}`;
+  const list = $("#up-report");
+  list.hidden = !items.length;
+  list.replaceChildren(
+    ...items.map((it) =>
+      el(
+        "li",
+        { class: it.status === "ok" ? "ok" : it.status === "dup" ? "dup" : "bad" },
+        el("span", { class: "ico", "aria-hidden": "true" }, ICONS[it.status] || "•"),
+        el("span", { class: "name" }, it.name, it.detail ? el("span", { class: "why" }, it.detail) : null)
+      )
+    )
+  );
+  $("#up-copy").hidden = !final;
+}
+
+$("#up-copy").addEventListener("click", async () => {
+  const text = lastReport
+    .map((it) => `${ICONS[it.status] || "•"} ${it.name}${it.detail ? " — " + it.detail : ""}`)
+    .join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Informe copiado");
+  } catch {
+    toast("No se pudo copiar; haz captura de pantalla del informe");
+  }
+});
+
+// Mensajes entendibles para errores técnicos.
+function friendlyError(err) {
+  const msg = String(err?.message || err || "");
+  const code = String(err?.statusCode || err?.status || "");
+  if (/exceeded the maximum allowed size|payload too large|too large/i.test(msg) || code === "413")
+    return `pesa más de lo que permite el servidor (${MAX_MB} MB)`;
+  if (/quota|storage limit|402|exceed_.*limit|not enough space/i.test(msg) || code === "402")
+    return "se llenó el almacenamiento (1 GB del plan gratuito); elimina libros o amplía el plan";
+  if (/already exists|duplicate/i.test(msg) || code === "409") return "ya existe un archivo igual";
+  if (/jwt|expired|not authenticated|invalid token/i.test(msg) || code === "401")
+    return "la sesión caducó; sal y vuelve a entrar";
+  if (/row-level security|violates|permission|not allowed/i.test(msg) || code === "403")
+    return "sin permiso para guardarlo (revisa tu sesión y las políticas de Supabase)";
+  if (/failed to fetch|networkerror|network request failed|load failed|timeout/i.test(msg))
+    return "se cortó la conexión; vuelve a intentarlo con mejor señal";
+  if (/password/i.test(msg)) return "el PDF tiene contraseña";
+  if (/invalid pdf|missing pdf|invalidpdf|unexpected server response|formaterror/i.test(msg))
+    return "el PDF está dañado o no se puede leer";
+  return msg || "error desconocido";
+}
+
+// Problemas detectables antes de subir: tamaño y tipo.
+function precheck(file) {
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if (!isPdf) return { status: "notpdf", name: file.name, detail: "no es un archivo PDF" };
+  if (file.size > MAX_MB * 1024 * 1024)
+    return { status: "big", name: file.name, detail: `pesa ${fmtMB(file.size)} y el límite es ${MAX_MB} MB` };
+  if (file.size === 0) return { status: "error", name: file.name, detail: "el archivo está vacío" };
+  return null;
+}
+
 let guessToken = 0;
 let lastAutoTags = ""; // última sugerencia puesta automáticamente en el campo de etiquetas
 
@@ -522,23 +638,38 @@ async function guessFromFile(file) {
 }
 
 $("#up-file").addEventListener("change", async (e) => {
-  const files = e.target.files;
+  const files = [...e.target.files];
   const multi = files.length > 1;
   const token = ++guessToken;
   $("#single-fields").hidden = multi;
   $("#up-title").required = !multi;
   $("#up-title").value = "";
   $("#up-author").value = "";
+  $("#up-submit").hidden = false;
+  $("#up-cancel").textContent = "Cancelar";
   upStatus("");
+  clearReport();
+
+  const problems = files.map(precheck).filter(Boolean);
+  const valid = files.length - problems.length;
+  $("#up-submit").disabled = files.length > 0 && valid === 0;
+  if (problems.length) renderReport(problems);
+
   if (multi) {
     upStatus(
-      `${files.length} archivos seleccionados: el título y el autor se detectan solos leyendo cada portada. ` +
-        "Las etiquetas que escribas se aplican a todos."
+      `${files.length} archivos seleccionados` +
+        (problems.length ? `: ${valid} se pueden subir y ${problems.length} se omitirán (ver abajo). ` : ". ") +
+        "El título y el autor se detectan solos leyendo cada portada. Las etiquetas que escribas se aplican a todos.",
+      !problems.length
     );
     return;
   }
   const file = files[0];
   if (!file) return;
+  if (problems.length) {
+    upStatus(problems[0].detail.charAt(0).toUpperCase() + problems[0].detail.slice(1) + ".", false);
+    return;
+  }
   upStatus("Leyendo portada…");
   try {
     const g = await guessFromFile(file);
@@ -555,10 +686,10 @@ $("#up-file").addEventListener("change", async (e) => {
         ? "No se encontró el título dentro del PDF, se usó el nombre del archivo. Revísalo."
         : "Título y autor detectados. Revísalos antes de subir."
     );
-  } catch {
+  } catch (err) {
     if (token !== guessToken) return;
     $("#up-title").value = NetbookMeta.cleanFilename(file.name);
-    upStatus("");
+    upStatus(`No se pudo leer el PDF (${friendlyError(err)}). Aun así puedes intentar subirlo.`, false);
   }
 });
 
@@ -577,11 +708,10 @@ async function renderCover(pdf) {
 }
 
 // Sube un PDF: detecta datos, genera portada, guarda archivo y fila.
-// Devuelve { source } si salió bien, { skipped: true } si ya existía, o { error } si falló.
+// Devuelve { status: "ok"|"dup"|"big"|"notpdf"|"error", title, detail, source }.
 async function uploadOne(file, meta) {
-  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  if (!isPdf) return { error: "no es un PDF" };
-  if (file.size > MAX_MB * 1024 * 1024) return { error: `supera ${MAX_MB} MB` };
+  const pre = precheck(file);
+  if (pre) return { status: pre.status, detail: pre.detail };
 
   const id = crypto.randomUUID();
   const uid = state.user.id;
@@ -590,6 +720,7 @@ async function uploadOne(file, meta) {
   let pdf = null;
   let pdfUploaded = false;
   let coverUploaded = false;
+  let step = "leer el PDF";
 
   try {
     pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -605,20 +736,29 @@ async function uploadOne(file, meta) {
       author = g.author;
       source = g.source;
       key = `${title.toLowerCase()}|${pages}`;
-      if (meta.known.has(key)) return { skipped: true };
+      if (meta.known.has(key))
+        return { status: "dup", title, detail: `repetido: ya tienes «${title}» con ${pages} páginas` };
       tags = unionTags(meta.userTags, meta.autoTags ? NetbookMeta.suggestTags(title) : []);
+    } else {
+      key = `${title.toLowerCase()}|${pages}`;
+      if (meta.known.has(key))
+        return { status: "dup", title, detail: `repetido: ya tienes «${title}» con ${pages} páginas` };
     }
 
+    step = "generar la portada";
     const coverBlob = await renderCover(pdf);
 
+    step = "subir el PDF";
     const up1 = await sb.storage.from("pdfs").upload(pdfPath, file, { contentType: "application/pdf" });
     if (up1.error) throw up1.error;
     pdfUploaded = true;
 
+    step = "subir la portada";
     const up2 = await sb.storage.from("covers").upload(coverPath, coverBlob, { contentType: "image/jpeg" });
     if (up2.error) throw up2.error;
     coverUploaded = true;
 
+    step = "guardar el registro";
     const { error } = await sb.from("books").insert({
       id,
       title,
@@ -632,12 +772,14 @@ async function uploadOne(file, meta) {
     if (error) throw error;
 
     if (key) meta.known.add(key);
-    return { source };
+    return { status: "ok", title, source, detail: source === "filename" ? "título tomado del nombre del archivo; corrígelo con ✎ en el lector" : "" };
   } catch (err) {
     // Limpia archivos huérfanos si algo falló a medio camino.
-    if (pdfUploaded) await sb.storage.from("pdfs").remove([pdfPath]);
-    if (coverUploaded) await sb.storage.from("covers").remove([coverPath]);
-    return { error: err.message || String(err) };
+    try {
+      if (pdfUploaded) await sb.storage.from("pdfs").remove([pdfPath]);
+      if (coverUploaded) await sb.storage.from("covers").remove([coverPath]);
+    } catch { /* sin conexión: queda para limpiar luego */ }
+    return { status: "error", detail: `falló al ${step}: ${friendlyError(err)}` };
   } finally {
     if (pdf) pdf.destroy();
   }
@@ -656,52 +798,63 @@ $("#upload-form").addEventListener("submit", async (e) => {
 
   submit.disabled = true;
   cancel.disabled = true;
+  clearReport();
 
-  // Evita duplicar libros ya subidos (mismo título detectado y mismo número de páginas).
+  // Evita duplicar libros ya subidos (mismo título detectado y mismas páginas).
   const known = new Set(state.books.map((b) => `${b.title.toLowerCase()}|${b.pages}`));
-  let done = 0;
-  let fallback = 0;
-  const skipped = [];
-  const failed = [];
+  const report = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    upStatus(`Subiendo ${i + 1} de ${files.length}: ${f.name}`);
-    let meta;
-    if (multi) {
-      meta = { auto: true, known, category, userTags, autoTags };
-    } else {
-      const title = $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name);
-      meta = {
-        auto: false,
-        title,
-        author: $("#up-author").value.trim() || null,
-        category,
-        tags: userTags.length || !autoTags ? userTags : NetbookMeta.suggestTags(title),
-      };
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      upStatus(`Subiendo ${i + 1} de ${files.length}: ${f.name}`);
+      let meta;
+      if (multi) {
+        meta = { auto: true, known, category, userTags, autoTags };
+      } else {
+        const title = $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name);
+        meta = {
+          auto: false,
+          known,
+          title,
+          author: $("#up-author").value.trim() || null,
+          category,
+          tags: userTags.length || !autoTags ? userTags : NetbookMeta.suggestTags(title),
+        };
+      }
+      let res;
+      try {
+        res = await uploadOne(f, meta);
+      } catch (err) {
+        res = { status: "error", detail: friendlyError(err) };
+      }
+      report.push({ name: res.title && res.title !== f.name ? `${res.title}  (${f.name})` : f.name, status: res.status, detail: res.detail });
     }
-    const res = await uploadOne(f, meta);
-    if (res.error) failed.push(`${f.name} (${res.error})`);
-    else if (res.skipped) skipped.push(f.name);
-    else {
-      done++;
-      if (res.source === "filename") fallback++;
-    }
+  } finally {
+    try { await refresh(); } catch { /* el informe se muestra igual */ }
+    cancel.disabled = false;
   }
 
-  await refresh();
-  cancel.disabled = false;
+  const okCount = report.filter((r) => r.status === "ok").length;
+  const noteCount = report.filter((r) => r.status === "ok" && r.detail).length;
+  // Primero lo que requiere atención, al final lo que salió bien.
+  const order = { error: 0, big: 1, notpdf: 2, dup: 3, ok: 4 };
+  report.sort((x, y) => order[x.status] - order[y.status]);
 
-  if (!failed.length) {
+  if (okCount === report.length && !noteCount) {
     closeUpload();
-    const notes = [];
-    if (skipped.length) notes.push(`${skipped.length} ya existían`);
-    if (fallback) notes.push(`${fallback} con título tomado del nombre del archivo (corrígelos con ✎ en el lector)`);
-    toast(`${done} libro(s) agregado(s)${notes.length ? ": " + notes.join("; ") : ""}`, 8000);
+    toast(`${okCount} libro(s) agregado(s)`, 6000);
     return;
   }
-  upStatus(`Se subieron ${done} de ${files.length}. Fallaron: ${failed.join(" · ")}`, false);
-  submit.disabled = false;
+  upStatus(
+    okCount === report.length
+      ? `Se subieron los ${okCount} libros. Algunos títulos conviene revisarlos.`
+      : `Se subieron ${okCount} de ${report.length}. Los demás no se subieron por los motivos de abajo.`,
+    okCount === report.length
+  );
+  renderReport(report, { final: true });
+  submit.hidden = true;
+  cancel.textContent = "Cerrar";
 });
 
 /* ---------- Lector ---------- */
@@ -874,7 +1027,8 @@ async function closeReader({ skipSave = false } = {}) {
 async function deleteBook() {
   const b = reader.book;
   if (!b) return;
-  if (!confirm(`¿Eliminar "${b.title}"? Esta acción no se puede deshacer.`)) return;
+  const yes = await askConfirm("Eliminar libro", [el("p", {}, `¿Eliminar «${b.title}»? Esta acción no se puede deshacer.`)], "Eliminar");
+  if (!yes) return;
   const { error } = await sb.from("books").delete().eq("id", b.id);
   if (error) {
     toast(`No se pudo eliminar: ${error.message}`);
@@ -939,6 +1093,10 @@ $("#edit-form").addEventListener("submit", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (!$("#confirm-modal").hidden) {
+    if (e.key === "Escape") $("#cf-cancel").click();
+    return;
+  }
   if (!$("#tag-modal").hidden) {
     if (e.key === "Escape") $("#tag-modal").hidden = true;
     return;

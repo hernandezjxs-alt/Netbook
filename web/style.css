@@ -212,3 +212,16 @@ body.selecting .card { outline: 2px dashed rgba(255, 255, 255, 0.25); outline-of
   background: #2a2a2a; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
 }
 body.selecting .toast { bottom: 5.5rem; }
+
+/* Informe de subida y confirmaciones */
+.summary { margin: 0; font-weight: 600; }
+.report { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; max-height: 38vh; overflow: auto; font-size: 0.85rem; }
+.report li { display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.4rem; padding: 0.4rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05); }
+.report .name { font-weight: 600; word-break: break-word; }
+.report .why { display: block; color: var(--muted); font-weight: 400; }
+.report li.ok .ico { color: #6fcf97; }
+.report li.dup .ico { color: #f2c94c; }
+.report li.bad .ico { color: #ff7b7b; }
+.cf-body { display: grid; gap: 0.5rem; max-height: 50vh; overflow: auto; font-size: 0.9rem; }
+.cf-body p { margin: 0; }
+.cf-list { margin: 0; padding-left: 1.1rem; color: var(--muted); }

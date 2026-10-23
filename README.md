@@ -69,7 +69,10 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
   - Las reglas están en `web/meta.js` (`TAG_RULES`): puedes agregar palabras o etiquetas nuevas.
   - Requiere la columna `tags` de la tabla `books`, que ya incluye `supabase/schema.sql`. Si tu base es anterior, ejecuta:
     `alter table public.books add column if not exists tags text[] not null default '{}';`
-- En subidas múltiples se omiten los libros que ya existen (mismo título y mismas páginas).
+- **Informe de subida**: al elegir archivos se revisan al instante (PDF válido, máx. 50 MB) y al terminar aparece una lista
+  por libro con el motivo: ✓ subido, ↺ repetido (mismo título y páginas), ✕ demasiado pesado (con su tamaño en MB),
+  ✕ no es PDF, ✕ error (cuota llena, conexión, PDF dañado o con contraseña…), más el conteo de cada caso.
+  Si algo no se subió, la ventana queda abierta con el informe (y un botón para copiarlo).
 - **✎** en el lector: corrige título, autor o categoría de un libro cuando la detección no acertó.
 - Filas automáticas: *Continuar leyendo*, *Agregados recientemente* y una por categoría.
 - Buscador por título, autor o categoría.

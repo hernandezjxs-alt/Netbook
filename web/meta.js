@@ -100,6 +100,7 @@
         x: i.transform[4],
         y: i.transform[5],
         size: Math.hypot(i.transform[0], i.transform[1]) || i.height || 0,
+        w: typeof i.width === "number" ? i.width : 0,
       }));
     if (!items.length) return [];
     items.sort((a, b) => b.y - a.y || a.x - b.x); // de arriba hacia abajo
@@ -115,15 +116,38 @@
     }
     return rows.map((r) => {
       r.parts.sort((a, b) => a.x - b.x);
-      return { text: tidy(r.parts.map((p) => p.str).join(" ")), size: r.size, y: r.y };
+      let text = "";
+      r.parts.forEach((p, k) => {
+        if (k > 0) {
+          const prev = r.parts[k - 1];
+          const gap = p.x - (prev.x + prev.w);
+          // fragmentos casi pegados (misma palabra partida por el PDF) se unen sin espacio
+          const glued = prev.w > 0 && gap < r.size * 0.12 && !/\s$/.test(prev.str) && !/^\s/.test(p.str);
+          text += glued ? "" : " ";
+        }
+        text += p.str;
+      });
+      return { text: tidy(text), size: r.size, y: r.y };
     });
   }
 
   // Devuelve { title, author } si la página parece una portada; null si parece texto corrido u otra cosa.
   function pickTitleAuthor(lines) {
-    const usable = lines.filter(
+    let usable = lines.filter(
       (l) => l.text.length >= 2 && l.size > 0 && /\p{L}/u.test(l.text) && !/^\d+$/.test(l.text) && !HARD_NOISE.test(l.text)
     );
+    // "By Diana Coronel" / "Por Juan Pérez": es el autor, nunca el título.
+    let byAuthor = null;
+    usable = usable.filter((l) => {
+      if (/^(by|por|autor|author|escrito por|written by)\b\s*[:.\-]?\s+/i.test(l.text)) {
+        const nm = looksLikeName(l.text);
+        if (nm) {
+          byAuthor = byAuthor || nm;
+          return false;
+        }
+      }
+      return true;
+    });
     if (!usable.length || usable.length > 18) return null;
 
     const sizes = usable.map((l) => l.size);
@@ -161,7 +185,7 @@
       const after = top.find((c) => usable.indexOf(c.line) > blockIdx);
       author = (after || top[0]).name;
     }
-    return { title: fixCaps(rawTitle), author };
+    return { title: fixCaps(rawTitle), author: byAuthor || author };
   }
 
   /* ---------- API principal ---------- */
@@ -210,17 +234,19 @@
     {
       tag: "Analista de datos",
       words: [
-        "python", "pandas", "numpy", "scikit", "matplotlib", "sql", "mysql", "postgres", "postgresql", "datos", "data",
-        "estadistica", "statistic", "machine learning", "aprendizaje automatico", "analisis de datos", "analytics",
-        "analitica", "excel", "big data", "ciencia de datos",
+        "python", "pandas", "numpy", "scikit", "matplotlib", "statsmodels", "sql", "mysql", "postgres", "postgresql",
+        "sqlalchemy", "datos", "data", "estadistica", "statistic", "machine learning", "aprendizaje automatico",
+        "analisis", "analytics", "analitica", "analista", "excel", "big data", "ciencia de datos", "forecast",
+        "pronostico", "proyeccion", "prediccion", "demanda", "automatiz", "reporte", "scripts", "etl",
       ],
     },
     {
       tag: "Analista BI",
       words: [
-        "power bi", "powerbi", "dax", "tableau", "qlik", "looker", "dashboard", "business intelligence",
-        "inteligencia de negocio", "data warehouse", "almacen de datos", "etl", "kimball", "modelado dimensional",
-        "visualizacion", "indicadores", "kpi", "reporting",
+        "power bi", "powerbi", "pbi", "pl-300", "pl 300", "dax", "power query", "tableau", "qlik", "looker",
+        "dashboard", "tablero", "business intelligence", "inteligencia de negocio", "data warehouse",
+        "almacen de datos", "kimball", "modelado dimensional", "visualizacion", "grafico", "figuras", "indicadores",
+        "kpi", "reporting", "reporte", "informes", "cuadro de mando", "bi",
       ],
     },
     {
@@ -229,19 +255,24 @@
         "programacion", "programming", "javascript", "typescript", "java", "linux", "redes", "network", "cloud", "nube",
         "aws", "azure", "docker", "kubernetes", "git", "devops", "software", "algoritmo", "ciberseguridad",
         "seguridad informatica", "base de datos", "bases de datos", "database", "api", "html", "css", "react", "node",
-        "sistemas operativos", "computacion", "informatica", "hacking",
+        "sistemas operativos", "computacion", "informatica", "hacking", "hackers", "pentest", "pentester", "mcp",
+        "claude", "vs code", "script", "sqlalchemy", "ingenieria", "tecnolog", "ia", "inteligencia artificial",
+        "chatgpt", "automatiz",
       ],
     },
     { tag: "Cuentos", words: ["cuentos", "cuento", "relatos", "relato", "short stories", "stories"] },
     { tag: "Novela", words: ["novela", "novel"] },
     {
       tag: "Negocios",
-      words: ["negocios", "business", "emprendimiento", "startup", "marketing", "ventas", "management", "liderazgo"],
+      words: [
+        "negocios", "business", "emprendimiento", "startup", "marketing", "ventas", "management", "liderazgo",
+        "linkedin", "social media", "carrusel", "carousel", "cont de valor", "plantillas", "estrategia",
+      ],
     },
-    { tag: "Finanzas", words: ["finanzas", "finance", "inversion", "inversiones", "contabilidad", "economia", "trading"] },
+    { tag: "Finanzas", words: ["finanzas", "finance", "inversion", "inversiones", "contabilidad", "economia", "trading", "boleta", "factura"] },
     {
       tag: "Desarrollo personal",
-      words: ["habitos", "productividad", "mindset", "motivacion", "autoayuda", "inteligencia emocional"],
+      words: ["habitos", "productividad", "mindset", "motivacion", "autoayuda", "inteligencia emocional", "memoria"],
     },
   ];
 
@@ -259,7 +290,11 @@
 
   function suggestTags(title) {
     const text = normText(title);
-    return TAG_RULES.filter((r) => r.words.some((w) => matchesWord(text, w))).map((r) => r.tag);
+    // Variante sin espacios para títulos con letras separadas ("P y thon"); solo palabras largas de una pieza.
+    const glued = text.replace(/[^a-z0-9]+/g, "");
+    return TAG_RULES.filter((r) =>
+      r.words.some((w) => matchesWord(text, w) || (!/[^a-z]/.test(normText(w)) && w.length >= 6 && glued.includes(normText(w))))
+    ).map((r) => r.tag);
   }
 
   const DEFAULT_TAGS = TAG_RULES.map((r) => r.tag);

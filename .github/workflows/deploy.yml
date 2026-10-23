@@ -23,6 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Versionar archivos (evita que el navegador use una copia vieja)
+        run: sed -i "s/__V__/${GITHUB_SHA::7}/g" web/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

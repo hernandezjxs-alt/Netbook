@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#141414">
   <title>Netbook</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=__V__">
 </head>
 <body>
 
@@ -93,7 +93,10 @@
       <div id="up-tag-sugs" class="sugs"></div>
       <label class="check"><input id="up-autotags" type="checkbox" checked> Sugerir etiquetas según el título</label>
       <p id="up-status" class="msg" role="status"></p>
+      <p id="up-summary" class="summary" role="status" hidden></p>
+      <ul id="up-report" class="report" hidden></ul>
       <div class="modal-actions">
+        <button id="up-copy" class="btn ghost" type="button" hidden>Copiar informe</button>
         <button id="up-cancel" class="btn ghost" type="button">Cancelar</button>
         <button id="up-submit" class="btn primary" type="submit">Subir</button>
       </div>
@@ -114,6 +117,18 @@
         <button class="btn primary" type="submit">Agregar</button>
       </div>
     </form>
+  </div>
+
+  <!-- Confirmación propia (confirm() del navegador falla en algunos móviles) -->
+  <div id="confirm-modal" class="modal top" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cf-title">
+      <h2 id="cf-title"></h2>
+      <div id="cf-body" class="cf-body"></div>
+      <div class="modal-actions">
+        <button id="cf-cancel" class="btn ghost" type="button">Cancelar</button>
+        <button id="cf-ok" class="btn primary" type="button">Aceptar</button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal de edición (se muestra sobre el lector) -->
@@ -176,8 +191,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="config.js"></script>
-  <script src="meta.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=__V__"></script>
+  <script src="meta.js?v=__V__"></script>
+  <script src="app.js?v=__V__"></script>
 </body>
 </html>
