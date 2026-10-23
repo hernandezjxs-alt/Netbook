@@ -87,6 +87,27 @@
     </form>
   </div>
 
+  <!-- Modal de edición (se muestra sobre el lector) -->
+  <div id="edit-modal" class="modal top" hidden>
+    <form id="edit-form" class="modal-card">
+      <h2>Editar libro</h2>
+      <label>Título
+        <input id="ed-title" type="text" maxlength="200" required>
+      </label>
+      <label>Autor
+        <input id="ed-author" type="text" maxlength="200">
+      </label>
+      <label>Categoría
+        <input id="ed-category" type="text" maxlength="60" list="category-list" required>
+      </label>
+      <p id="ed-status" class="msg" role="status"></p>
+      <div class="modal-actions">
+        <button id="ed-cancel" class="btn ghost" type="button">Cancelar</button>
+        <button class="btn primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+
   <!-- Lector -->
   <div id="reader" class="reader" hidden>
     <div class="reader-bar">
@@ -100,6 +121,7 @@
         <button id="rd-zoom-out" class="icon" type="button" aria-label="Alejar">−</button>
         <span id="rd-zoom" class="muted">100%</span>
         <button id="rd-zoom-in" class="icon" type="button" aria-label="Acercar">+</button>
+        <button id="rd-edit" class="icon" type="button" aria-label="Editar título y autor" title="Editar título y autor">✎</button>
         <button id="rd-delete" class="icon danger" type="button" aria-label="Eliminar libro" title="Eliminar libro">🗑</button>
       </div>
     </div>
@@ -114,6 +136,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="config.js"></script>
+  <script src="meta.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

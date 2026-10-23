@@ -56,7 +56,12 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 
 ## Uso
 
-- **+ Subir PDF**: eliges el archivo, el navegador genera la portada y cuenta las páginas, y todo se guarda en tu cuenta.
+- **+ Subir PDF**: puedes elegir varios archivos a la vez. El navegador genera la portada, cuenta las páginas y detecta
+  el **título y el autor** leyendo (en este orden) los metadatos del PDF, el texto de la portada y, si no hay nada,
+  el nombre del archivo limpiado (quita números de ID, ISBN, "z-lib", etc.).
+  Funciona con PDFs que tienen texto; en PDFs escaneados (solo imagen) usa el nombre del archivo.
+- En subidas múltiples se omiten los libros que ya existen (mismo título y mismas páginas).
+- **✎** en el lector: corrige título, autor o categoría de un libro cuando la detección no acertó.
 - Filas automáticas: *Continuar leyendo*, *Agregados recientemente* y una por categoría.
 - Buscador por título, autor o categoría.
 - Lector: flechas del teclado o deslizar en el móvil, zoom, y el progreso se guarda solo.

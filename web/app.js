@@ -43,12 +43,12 @@ function el(tag, props = {}, ...children) {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms = 4500) {
   const t = $("#toast");
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.hidden = true), 4500);
+  toastTimer = setTimeout(() => (t.hidden = true), ms);
 }
 
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
@@ -268,7 +268,7 @@ $("#search").addEventListener("input", (e) => {
 function openUpload() {
   $("#upload-form").reset();
   $("#up-category").value = "General";
-  $("#up-status").textContent = "";
+  upStatus("");
   $("#up-submit").disabled = false;
   $("#up-cancel").disabled = false;
   $("#single-fields").hidden = false;
@@ -286,17 +286,54 @@ $("#btn-upload").addEventListener("click", openUpload);
 $("#btn-upload-empty").addEventListener("click", openUpload);
 $("#up-cancel").addEventListener("click", closeUpload);
 
-const titleFromName = (name) => name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
+function upStatus(text, info = true) {
+  const s = $("#up-status");
+  s.textContent = text;
+  s.classList.toggle("info", info);
+}
 
-$("#up-file").addEventListener("change", (e) => {
+let guessToken = 0;
+
+async function guessFromFile(file) {
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  try {
+    return await NetbookMeta.guessMeta(pdf, file.name);
+  } finally {
+    pdf.destroy();
+  }
+}
+
+$("#up-file").addEventListener("change", async (e) => {
   const files = e.target.files;
   const multi = files.length > 1;
+  const token = ++guessToken;
   $("#single-fields").hidden = multi;
   $("#up-title").required = !multi;
-  $("#up-status").textContent = multi
-    ? `${files.length} archivos seleccionados: el título de cada libro se toma del nombre del archivo.`
-    : "";
-  if (!multi && files[0] && !$("#up-title").value) $("#up-title").value = titleFromName(files[0].name);
+  $("#up-title").value = "";
+  $("#up-author").value = "";
+  upStatus("");
+  if (multi) {
+    upStatus(`${files.length} archivos seleccionados: el título y el autor se detectan solos leyendo cada portada.`);
+    return;
+  }
+  const file = files[0];
+  if (!file) return;
+  upStatus("Leyendo portada…");
+  try {
+    const g = await guessFromFile(file);
+    if (token !== guessToken) return;
+    $("#up-title").value = g.title;
+    $("#up-author").value = g.author || "";
+    upStatus(
+      g.source === "filename"
+        ? "No se encontró el título dentro del PDF, se usó el nombre del archivo. Revísalo."
+        : "Título y autor detectados. Revísalos antes de subir."
+    );
+  } catch {
+    if (token !== guessToken) return;
+    $("#up-title").value = NetbookMeta.cleanFilename(file.name);
+    upStatus("");
+  }
 });
 
 async function renderCover(pdf) {
@@ -313,24 +350,38 @@ async function renderCover(pdf) {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
 }
 
-// Sube un PDF: genera portada, guarda archivo y fila. Devuelve null si salió bien o un mensaje de error.
+// Sube un PDF: detecta datos, genera portada, guarda archivo y fila.
+// Devuelve { source } si salió bien, { skipped: true } si ya existía, o { error } si falló.
 async function uploadOne(file, meta) {
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  if (!isPdf) return "no es un PDF";
-  if (file.size > MAX_MB * 1024 * 1024) return `supera ${MAX_MB} MB`;
+  if (!isPdf) return { error: "no es un PDF" };
+  if (file.size > MAX_MB * 1024 * 1024) return { error: `supera ${MAX_MB} MB` };
 
   const id = crypto.randomUUID();
   const uid = state.user.id;
   const pdfPath = `${uid}/${id}.pdf`;
   const coverPath = `${uid}/${id}.jpg`;
+  let pdf = null;
   let pdfUploaded = false;
   let coverUploaded = false;
 
   try {
-    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     const pages = pdf.numPages;
+    let { title, author } = meta;
+    let source = "manual";
+    let key = null;
+
+    if (meta.auto) {
+      const g = await NetbookMeta.guessMeta(pdf, file.name);
+      title = g.title;
+      author = g.author;
+      source = g.source;
+      key = `${title.toLowerCase()}|${pages}`;
+      if (meta.known.has(key)) return { skipped: true };
+    }
+
     const coverBlob = await renderCover(pdf);
-    pdf.destroy();
 
     const up1 = await sb.storage.from("pdfs").upload(pdfPath, file, { contentType: "application/pdf" });
     if (up1.error) throw up1.error;
@@ -342,20 +393,24 @@ async function uploadOne(file, meta) {
 
     const { error } = await sb.from("books").insert({
       id,
-      title: meta.title,
-      author: meta.author,
+      title,
+      author: author || null,
       category: meta.category,
       pages,
       pdf_path: pdfPath,
       cover_path: coverPath,
     });
     if (error) throw error;
-    return null;
+
+    if (key) meta.known.add(key);
+    return { source };
   } catch (err) {
     // Limpia archivos huérfanos si algo falló a medio camino.
     if (pdfUploaded) await sb.storage.from("pdfs").remove([pdfPath]);
     if (coverUploaded) await sb.storage.from("covers").remove([coverPath]);
-    return err.message || String(err);
+    return { error: err.message || String(err) };
+  } finally {
+    if (pdf) pdf.destroy();
   }
 }
 
@@ -363,7 +418,6 @@ $("#upload-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const files = [...$("#up-file").files];
   if (!files.length) return;
-  const status = $("#up-status");
   const submit = $("#up-submit");
   const cancel = $("#up-cancel");
   const multi = files.length > 1;
@@ -372,27 +426,30 @@ $("#upload-form").addEventListener("submit", async (e) => {
   submit.disabled = true;
   cancel.disabled = true;
 
-  const known = new Set(state.books.map((b) => b.title.toLowerCase()));
+  // Evita duplicar libros ya subidos (mismo título detectado y mismo número de páginas).
+  const known = new Set(state.books.map((b) => `${b.title.toLowerCase()}|${b.pages}`));
   let done = 0;
+  let fallback = 0;
   const skipped = [];
   const failed = [];
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    const title = multi ? titleFromName(f.name) : $("#up-title").value.trim() || titleFromName(f.name);
-    status.textContent = `Subiendo ${i + 1} de ${files.length}: ${f.name}`;
-
-    // En subidas múltiples se omiten títulos ya existentes (útil para reintentar sin duplicar).
-    if (multi && known.has(title.toLowerCase())) {
-      skipped.push(f.name);
-      continue;
-    }
-    const author = multi ? null : $("#up-author").value.trim() || null;
-    const err = await uploadOne(f, { title, author, category });
-    if (err) failed.push(`${f.name} (${err})`);
+    upStatus(`Subiendo ${i + 1} de ${files.length}: ${f.name}`);
+    const meta = multi
+      ? { auto: true, known, category }
+      : {
+          auto: false,
+          title: $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name),
+          author: $("#up-author").value.trim() || null,
+          category,
+        };
+    const res = await uploadOne(f, meta);
+    if (res.error) failed.push(`${f.name} (${res.error})`);
+    else if (res.skipped) skipped.push(f.name);
     else {
       done++;
-      known.add(title.toLowerCase());
+      if (res.source === "filename") fallback++;
     }
   }
 
@@ -401,11 +458,13 @@ $("#upload-form").addEventListener("submit", async (e) => {
 
   if (!failed.length) {
     closeUpload();
-    const extra = skipped.length ? `, ${skipped.length} ya existían` : "";
-    toast(`${done} libro(s) agregado(s)${extra}`);
+    const notes = [];
+    if (skipped.length) notes.push(`${skipped.length} ya existían`);
+    if (fallback) notes.push(`${fallback} con título tomado del nombre del archivo (corrígelos con ✎ en el lector)`);
+    toast(`${done} libro(s) agregado(s)${notes.length ? ": " + notes.join("; ") : ""}`, 8000);
     return;
   }
-  status.textContent = `Se subieron ${done} de ${files.length}. Fallaron: ${failed.join(" · ")}`;
+  upStatus(`Se subieron ${done} de ${files.length}. Fallaron: ${failed.join(" · ")}`, false);
   submit.disabled = false;
 });
 
@@ -600,7 +659,51 @@ $("#rd-zoom-in").addEventListener("click", () => setZoom(reader.zoom + 0.25));
 $("#rd-zoom-out").addEventListener("click", () => setZoom(reader.zoom - 0.25));
 $("#rd-delete").addEventListener("click", deleteBook);
 
+/* ---------- Editar libro ---------- */
+
+function openEdit() {
+  const b = reader.book;
+  if (!b) return;
+  $("#ed-title").value = b.title;
+  $("#ed-author").value = b.author || "";
+  $("#ed-category").value = b.category || "General";
+  $("#ed-status").textContent = "";
+  const cats = [...new Set(state.books.map((x) => x.category).filter(Boolean))].sort();
+  $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
+  $("#edit-modal").hidden = false;
+}
+
+function closeEdit() {
+  $("#edit-modal").hidden = true;
+}
+
+$("#rd-edit").addEventListener("click", openEdit);
+$("#ed-cancel").addEventListener("click", closeEdit);
+$("#edit-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const b = reader.book;
+  if (!b) return;
+  const patch = {
+    title: $("#ed-title").value.trim(),
+    author: $("#ed-author").value.trim() || null,
+    category: $("#ed-category").value.trim() || "General",
+  };
+  const { error } = await sb.from("books").update(patch).eq("id", b.id);
+  if (error) {
+    $("#ed-status").textContent = `No se pudo guardar: ${error.message}`;
+    return;
+  }
+  Object.assign(b, patch);
+  $("#rd-title").textContent = b.title;
+  closeEdit();
+  toast("Cambios guardados");
+});
+
 document.addEventListener("keydown", (e) => {
+  if (!$("#edit-modal").hidden) {
+    if (e.key === "Escape") closeEdit();
+    return;
+  }
   if ($("#reader").hidden) {
     if (e.key === "Escape" && !$("#upload-modal").hidden) closeUpload();
     return;

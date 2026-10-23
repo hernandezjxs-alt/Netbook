@@ -145,6 +145,8 @@ label { display: grid; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
 .modal-card { width: min(440px, 100%); max-height: 100%; overflow: auto; display: grid; gap: 0.9rem; background: var(--panel); padding: 1.5rem; border-radius: 12px; }
 .modal-card h2 { margin: 0; }
 .fields { display: grid; gap: 0.9rem; }
+.modal.top { z-index: 70; }
+.msg.info { color: var(--muted); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
 
 /* Lector */
