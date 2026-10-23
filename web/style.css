@@ -391,3 +391,12 @@ details.pick > .sugs { padding: 0.6rem; }
 #upload-form.done .report { max-height: 45vh; }
 #upload-form .modal-actions { position: sticky; bottom: -1.5rem; padding: 0.8rem 0 0; background: linear-gradient(to top, rgba(24, 24, 33, 1) 70%, transparent); flex-wrap: wrap; }
 #upload-form.done .modal-actions .btn.primary { flex: 1 1 auto; }
+
+/* Editar desde la tarjeta */
+.card-edit {
+  position: absolute; right: 6px; top: 6px; z-index: 3; width: 30px; height: 30px; display: grid; place-items: center;
+  border-radius: 50%; background: rgba(10, 10, 14, 0.75); border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff; font-size: 0.95rem; cursor: pointer; backdrop-filter: blur(6px);
+}
+.card-edit:hover, .card-edit:focus-visible { background: var(--red); }
+.stat { right: auto; left: 6px; top: 38px; }

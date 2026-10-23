@@ -366,6 +366,11 @@ function cardEl(b, rank = null, stat = null) {
     cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, b.title),
     el("div", { class: "card-info" }, el("strong", {}, b.title), el("span", {}, b.author || b.category)),
     el("span", { class: "check-badge", "aria-hidden": "true" }, "✓"),
+    state.selecting ? null : el("span", {
+      class: "card-edit", role: "button", tabindex: "0", title: "Editar", "aria-label": `Editar ${b.title}`,
+      onclick: (ev) => { ev.stopPropagation(); openEdit(b); },
+      onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); openEdit(b); } },
+    }, "✎"),
     rank ? el("span", { class: "rank" + (rank <= 3 ? " top" : "") }, `#${rank}`) : null,
     stat ? el("span", { class: "stat" }, stat) : null,
     pct > 0 ? el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })) : null
@@ -1297,9 +1302,12 @@ $("#rd-download").addEventListener("click", async () => {
 
 /* ---------- Editar libro ---------- */
 
-function openEdit() {
-  const b = reader.book;
+let editing = null; // libro que se está editando
+
+function openEdit(book) {
+  const b = book && book.id ? book : reader.book;
   if (!b) return;
+  editing = b;
   $("#ed-title").value = b.title;
   $("#ed-author").value = b.author || "";
   $("#ed-category").value = b.category || "General";
@@ -1311,14 +1319,15 @@ function openEdit() {
 }
 
 function closeEdit() {
+  editing = null;
   $("#edit-modal").hidden = true;
 }
 
-$("#rd-edit").addEventListener("click", openEdit);
+$("#rd-edit").addEventListener("click", () => openEdit());
 $("#ed-cancel").addEventListener("click", closeEdit);
 $("#edit-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const b = reader.book;
+  const b = editing;
   if (!b) return;
   const patch = {
     title: $("#ed-title").value.trim(),
@@ -1332,8 +1341,9 @@ $("#edit-form").addEventListener("submit", async (e) => {
     return;
   }
   Object.assign(b, patch);
-  $("#rd-title").textContent = b.title;
+  if (reader.book && reader.book.id === b.id) $("#rd-title").textContent = b.title;
   closeEdit();
+  render();
   toast("Cambios guardados");
 });
 
