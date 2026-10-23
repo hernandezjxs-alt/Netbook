@@ -27,6 +27,7 @@
       </label>
       <button id="btn-signup" class="btn ghost" type="button">Crear cuenta</button>
       <p id="auth-msg" class="msg" role="status"></p>
+      <button class="btn ghost small contact-open" type="button">✉ Contacto</button>
     </form>
   </main>
 
@@ -36,6 +37,7 @@
       <h1 class="logo">NETBOOK</h1>
       <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
       <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
+      <button id="btn-contact" class="icon" type="button" aria-label="Contacto" title="Contacto">✉</button>
       <span id="user-badge" class="badge" hidden></span>
       <button id="btn-logout" class="btn ghost" type="button">Salir</button>
     </header>
@@ -67,6 +69,25 @@
     </div>
 
     <main id="rows"></main>
+  </div>
+
+  <footer class="site-footer">
+    <span>Elaborado por <strong>JH</strong> · Todos los derechos reservados · Octubre 2026</span>
+    <button class="linklike contact-open" type="button">✉ Contacto</button>
+  </footer>
+
+  <!-- Contacto (formulario de Google) -->
+  <div id="contact-modal" class="modal top" hidden>
+    <div class="modal-card contact-card" role="dialog" aria-modal="true" aria-labelledby="ct-title">
+      <h2 id="ct-title">Contacto</h2>
+      <p class="muted">Déjame tus datos y tu mensaje; me llegará por correo.</p>
+      <iframe id="ct-frame" title="Formulario de contacto" hidden loading="lazy"></iframe>
+      <div class="modal-actions">
+        <a id="ct-open" class="btn ghost" target="_blank" rel="noopener" hidden>Abrir en otra pestaña</a>
+        <a id="ct-mail" class="btn primary" hidden>Escribir por correo</a>
+        <button id="ct-close" class="btn ghost" type="button">Cerrar</button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal de subida -->

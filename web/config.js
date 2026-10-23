@@ -4,4 +4,8 @@
 window.APP_CONFIG = {
   SUPABASE_URL: "https://tvnwzjlchidpgngsvemm.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_GuZvmZrbcMtba4kkK3gWfg_7fESFMt4",
+  // Enlace público de tu Google Form de contacto (el que termina en /viewform). Mientras esté vacío,
+  // el botón de contacto abre un correo a CONTACT_EMAIL.
+  CONTACT_FORM_URL: "",
+  CONTACT_EMAIL: "hernandezjxs@gmail.com",
 };

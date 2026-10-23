@@ -1,6 +1,6 @@
 "use strict";
 
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.APP_CONFIG || {};
+const { SUPABASE_URL, SUPABASE_ANON_KEY, CONTACT_FORM_URL, CONTACT_EMAIL } = window.APP_CONFIG || {};
 const MAX_MB = 50;
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
@@ -26,6 +26,9 @@ const state = {
   selecting: false,      // modo selección múltiple
   selected: new Set(),   // ids seleccionados
 };
+
+const DEFAULT_CATEGORIES = ["General", "Técnico", "Novelas", "Cuentos", "Negocios", "Finanzas", "Historia", "Ciencia", "Desarrollo personal", "Infantil", "Poesía", "Educación", "Salud", "Cocina", "Idiomas", "Arte"];
+const categoryOptions = () => [...new Set([...DEFAULT_CATEGORIES, ...state.books.map((b) => b.category).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "es"));
 
 const NONE_TAG = "__none__"; // filtro especial: libros sin etiquetas
 
@@ -537,8 +540,7 @@ function openUpload() {
   $("#up-title").required = true;
   lastAutoTags = "";
   renderSuggestions($("#up-tag-sugs"), $("#up-tags"));
-  const cats = [...new Set(state.books.map((b) => b.category).filter(Boolean))].sort();
-  $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
+  $("#category-list").replaceChildren(...categoryOptions().map((c) => el("option", { value: c })));
   $("#upload-modal").hidden = false;
 }
 
@@ -1122,8 +1124,7 @@ function openEdit() {
   $("#ed-tags").value = tagsOf(b).join(", ");
   renderSuggestions($("#ed-tag-sugs"), $("#ed-tags"));
   $("#ed-status").textContent = "";
-  const cats = [...new Set(state.books.map((x) => x.category).filter(Boolean))].sort();
-  $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
+  $("#category-list").replaceChildren(...categoryOptions().map((c) => el("option", { value: c })));
   $("#edit-modal").hidden = false;
 }
 
@@ -1155,6 +1156,10 @@ $("#edit-form").addEventListener("submit", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (!$("#contact-modal").hidden) {
+    if (e.key === "Escape") $("#contact-modal").hidden = true;
+    return;
+  }
   if (!$("#confirm-modal").hidden) {
     if (e.key === "Escape") $("#cf-cancel").click();
     return;
@@ -1199,6 +1204,25 @@ window.addEventListener("resize", () => {
 window.addEventListener("pagehide", () => {
   if (reader.book && reader.ready) saveProgress(reader.book.id, reader.page);
 });
+
+/* ---------- Contacto ---------- */
+
+function openContact() {
+  const frame = $("#ct-frame");
+  const hasForm = /^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(CONTACT_FORM_URL || "");
+  frame.hidden = !hasForm;
+  $("#ct-open").hidden = !hasForm;
+  $("#ct-mail").hidden = !CONTACT_EMAIL;
+  if (CONTACT_EMAIL) $("#ct-mail").href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Contacto desde Netbook")}`;
+  if (hasForm) {
+    const url = CONTACT_FORM_URL.includes("docs.google.com") ? CONTACT_FORM_URL.replace(/[?&]embedded=true/, "") + (CONTACT_FORM_URL.includes("?") ? "&" : "?") + "embedded=true" : CONTACT_FORM_URL;
+    if (frame.getAttribute("src") !== url) frame.setAttribute("src", url);
+    $("#ct-open").href = CONTACT_FORM_URL;
+  }
+  $("#contact-modal").hidden = false;
+}
+document.querySelectorAll("#btn-contact, .contact-open").forEach((b) => b.addEventListener("click", openContact));
+$("#ct-close").addEventListener("click", () => ($("#contact-modal").hidden = true));
 
 /* ---------- Arranque ---------- */
 
