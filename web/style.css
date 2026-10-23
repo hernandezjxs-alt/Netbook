@@ -601,3 +601,12 @@ input, select, textarea { font-size: max(16px, 1rem); }
 .new-item .new-item-input { flex: 1; min-width: 0; padding: 0.55rem 0.8rem; }
 .new-item .btn { white-space: nowrap; }
 .chip.small.active { color: #fff; }
+
+/* Gestión de listas (admin) */
+.taxo { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; max-height: 62vh; overflow: auto; padding-right: 0.6rem; }
+.taxo-col h3 { margin: 0 0 0.6rem; }
+.taxo-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.taxo-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding-right: 0.3rem; }
+.taxo-x { background: none; border: 0; color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; padding: 0 0.3rem; opacity: 0.7; }
+.taxo-x:hover { opacity: 1; color: #ff4b59; }
+@media (max-width: 560px) { .taxo { grid-template-columns: 1fr; } }

@@ -115,3 +115,6 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 
 ## Avisos de libros nuevos
 Cuando un usuario (no admin) termina de subir libros, la app crea un aviso en la tabla `notifications` y aparece en el 📨 del admin (con contador y un mensaje arriba). Si la Edge Function `notify-upload` tiene el secreto `RESEND_API_KEY`, también llega un correo a `NOTIFY_TO` (por defecto hernandezjxs@gmail.com). Sin ese secreto, el correo se omite y solo funciona el aviso dentro de la app.
+
+## Etiquetas y categorias oficiales
+El admin las crea desde el icono 🏷️ (tabla `taxonomy`, solo el admin escribe, todos leen). Aparecen en los desplegables de subir y editar para todos.

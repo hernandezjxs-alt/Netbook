@@ -55,7 +55,7 @@ function renderCategoryChips(container, input) {
   const used = new Map();
   for (const b of state.books) if (b.category) used.set(b.category, (used.get(b.category) || 0) + 1);
   const names = [...used.keys()].sort((a, b) => used.get(b) - used.get(a));
-  const rest = [...customList("nb_custom_cats"), ...DEFAULT_CATEGORIES].filter((c, i, a) => !used.has(c) && a.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i);
+  const rest = [...taxo("category"), ...DEFAULT_CATEGORIES].filter((c, i, a) => !used.has(c) && a.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i);
   const mk = (c, mine) =>
     el("button", {
       type: "button",
@@ -66,21 +66,17 @@ function renderCategoryChips(container, input) {
         container.closest("details")?.removeAttribute("open");
       },
     }, mine ? `${c} (${used.get(c)})` : c);
-  const create = newItemRow("Nueva categoría (ej. Yacimientos)", (v) => {
-    addCustom("nb_custom_cats", v);
-    input.value = v;
-    renderCategoryChips(container, input);
-    container.closest("details")?.removeAttribute("open");
-  });
-  container.replaceChildren(create, ...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
+  container.replaceChildren(...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
 }
 
 // Etiquetas y categorías creadas a mano: quedan en la lista aunque aún no tengan libros.
-const customList = (k) => { try { return JSON.parse(pref(k, "[]")); } catch { return []; } };
-const addCustom = (k, v) => {
-  const cur = customList(k);
-  if (!cur.some((x) => x.toLowerCase() === v.toLowerCase())) setPref(k, JSON.stringify([...cur, v].slice(-60)));
-};
+// Listas oficiales creadas por el admin (tabla taxonomy): las ven todos los usuarios.
+state.taxonomy = [];
+const taxo = (kind) => state.taxonomy.filter((t) => t.kind === kind).map((t) => t.name);
+async function loadTaxonomy() {
+  const { data, error } = await sb.from("taxonomy").select("*").order("name");
+  if (!error && data) state.taxonomy = data;
+}
 
 const NONE_TAG = "__none__";
 const FAV_TAG = "__fav__"; // filtro especial: favoritos
@@ -356,6 +352,7 @@ async function loadProfile() {
   renderBadge();
   $("#btn-inbox").hidden = state.profile?.role !== "admin";
   $("#btn-users").hidden = state.profile?.role !== "admin";
+  $("#btn-taxo").hidden = state.profile?.role !== "admin";
   loadInbox();
   maybeAskProfile();
 }
@@ -374,6 +371,7 @@ async function refresh() {
     toast(`No se pudo cargar la biblioteca: ${err.message}`);
     return;
   }
+  await loadTaxonomy();
   const favs = new Set((favRes.data || []).map((f) => f.book_id)); // (si falla, solo no se ven los favoritos)
   state.books = booksRes.data.map((b) => ({ ...b, favorite: favs.has(b.id) }));
   state.loading = false;
@@ -518,16 +516,9 @@ function unionTags(current, added) {
 // Botones "+ Etiqueta" para agregar rápido al campo de texto.
 function renderSuggestions(container, input) {
   const sel = new Set(normTags(input.value).map((t) => t.toLowerCase()));
-  const all = [...customList("nb_custom_tags"), ...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS];
+  const all = [...taxo("tag"), ...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS];
   const names = all.filter((t, i) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i);
-  const create = newItemRow("Nueva etiqueta (ej. Yacimientos)", (v) => {
-    addCustom("nb_custom_tags", v);
-    input.value = unionTags(normTags(input.value), [v]).join(", ");
-    renderSuggestions(container, input);
-    toast(`Etiqueta "${v}" creada y agregada a este libro.`);
-  });
   container.replaceChildren(
-    create,
     ...names.map((t) =>
       el(
         "button",
@@ -1764,6 +1755,38 @@ $("#profile-form").addEventListener("submit", async (e) => {
   $("#profile-modal").hidden = true;
   toast("Perfil actualizado");
 });
+
+/* Etiquetas y categorías oficiales (solo admin) */
+function renderTaxo() {
+  const col = (kind, title, ph) => {
+    const items = state.taxonomy.filter((t) => t.kind === kind);
+    return el("div", { class: "taxo-col" },
+      el("h3", {}, title),
+      newItemRow(ph, async (v) => {
+        const { error } = await sb.from("taxonomy").insert({ kind, name: v });
+        if (error) return toast(error.code === "23505" ? `"${v}" ya existe` : `No se pudo crear: ${error.message}`);
+        await loadTaxonomy();
+        renderTaxo();
+        toast(`"${v}" creada para todos`);
+      }),
+      el("div", { class: "taxo-list" }, items.length ? items.map((t) =>
+        el("span", { class: "chip small taxo-chip" }, t.name, el("button", { type: "button", class: "taxo-x", "aria-label": `Quitar ${t.name}`, onclick: async () => {
+          if (!(await askConfirm("Quitar de la lista", [el("p", {}, `¿Quitar "${t.name}" de la lista? Los libros que ya la usan no cambian.`)], "Quitar"))) return;
+          await sb.from("taxonomy").delete().eq("id", t.id);
+          await loadTaxonomy();
+          renderTaxo();
+        } }, "×"))
+      ) : el("p", { class: "muted" }, "Aún no hay ninguna."))
+    );
+  };
+  $("#taxo-body").replaceChildren(col("tag", "Etiquetas", "Nueva etiqueta (ej. Yacimientos)"), col("category", "Categorías", "Nueva categoría (ej. Yacimientos)"));
+}
+$("#btn-taxo").addEventListener("click", async () => {
+  await loadTaxonomy();
+  renderTaxo();
+  $("#taxo-modal").hidden = false;
+});
+$("#taxo-close").addEventListener("click", () => { $("#taxo-modal").hidden = true; render(); });
 
 $("#btn-users").addEventListener("click", async () => {
   const { data, error } = await sb.rpc("admin_users");
