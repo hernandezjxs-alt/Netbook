@@ -201,7 +201,70 @@
     return result;
   }
 
-  const api = { guessMeta, cleanFilename, pickTitleAuthor, pageLines };
+  /* ---------- Etiquetas sugeridas por el título ---------- */
+
+  // Reglas editables: si el título contiene alguna de las palabras, se sugiere la etiqueta.
+  // Las palabras de 4+ letras coinciden por prefijo ("program" encuentra "programación");
+  // las de 3 o menos letras deben coincidir completas ("sql", "dax", "git").
+  const TAG_RULES = [
+    {
+      tag: "Analista de datos",
+      words: [
+        "python", "pandas", "numpy", "scikit", "matplotlib", "sql", "mysql", "postgres", "postgresql", "datos", "data",
+        "estadistica", "statistic", "machine learning", "aprendizaje automatico", "analisis de datos", "analytics",
+        "analitica", "excel", "big data", "ciencia de datos",
+      ],
+    },
+    {
+      tag: "Analista BI",
+      words: [
+        "power bi", "powerbi", "dax", "tableau", "qlik", "looker", "dashboard", "business intelligence",
+        "inteligencia de negocio", "data warehouse", "almacen de datos", "etl", "kimball", "modelado dimensional",
+        "visualizacion", "indicadores", "kpi", "reporting",
+      ],
+    },
+    {
+      tag: "IT",
+      words: [
+        "programacion", "programming", "javascript", "typescript", "java", "linux", "redes", "network", "cloud", "nube",
+        "aws", "azure", "docker", "kubernetes", "git", "devops", "software", "algoritmo", "ciberseguridad",
+        "seguridad informatica", "base de datos", "bases de datos", "database", "api", "html", "css", "react", "node",
+        "sistemas operativos", "computacion", "informatica", "hacking",
+      ],
+    },
+    { tag: "Cuentos", words: ["cuentos", "cuento", "relatos", "relato", "short stories", "stories"] },
+    { tag: "Novela", words: ["novela", "novel"] },
+    {
+      tag: "Negocios",
+      words: ["negocios", "business", "emprendimiento", "startup", "marketing", "ventas", "management", "liderazgo"],
+    },
+    { tag: "Finanzas", words: ["finanzas", "finance", "inversion", "inversiones", "contabilidad", "economia", "trading"] },
+    {
+      tag: "Desarrollo personal",
+      words: ["habitos", "productividad", "mindset", "motivacion", "autoayuda", "inteligencia emocional"],
+    },
+  ];
+
+  const normText = (s) =>
+    String(s || "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase();
+
+  function matchesWord(text, word) {
+    const w = normText(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const exact = word.length <= 3;
+    return new RegExp(`(^|[^a-z0-9])${w}${exact ? "([^a-z0-9]|$)" : ""}`).test(text);
+  }
+
+  function suggestTags(title) {
+    const text = normText(title);
+    return TAG_RULES.filter((r) => r.words.some((w) => matchesWord(text, w))).map((r) => r.tag);
+  }
+
+  const DEFAULT_TAGS = TAG_RULES.map((r) => r.tag);
+
+  const api = { guessMeta, cleanFilename, pickTitleAuthor, pageLines, suggestTags, DEFAULT_TAGS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.NetbookMeta = api;
 })(typeof window !== "undefined" ? window : globalThis);

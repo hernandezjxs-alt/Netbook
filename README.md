@@ -60,6 +60,15 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
   el **título y el autor** leyendo (en este orden) los metadatos del PDF, el texto de la portada y, si no hay nada,
   el nombre del archivo limpiado (quita números de ID, ISBN, "z-lib", etc.).
   Funciona con PDFs que tienen texto; en PDFs escaneados (solo imagen) usa el nombre del archivo.
+- **Etiquetas y filtros**: cada libro puede tener varias etiquetas (por ejemplo *Analista de datos*, *Analista BI*, *IT*,
+  *Cuentos*). Arriba aparecen chips para filtrar; si activas varios se muestran los libros que tengan cualquiera de ellos.
+  El chip *Sin etiqueta* muestra lo que falta por clasificar.
+  - Al subir, las etiquetas se sugieren por palabras del título (se pueden cambiar o desactivar).
+  - **✨ Etiquetar automático** clasifica de una vez los libros sin etiqueta usando esas mismas reglas.
+  - **Seleccionar** permite marcar varios libros (o "Todos los visibles" con un filtro activo) y agregarles etiquetas juntos.
+  - Las reglas están en `web/meta.js` (`TAG_RULES`): puedes agregar palabras o etiquetas nuevas.
+  - Requiere la columna `tags` de la tabla `books`, que ya incluye `supabase/schema.sql`. Si tu base es anterior, ejecuta:
+    `alter table public.books add column if not exists tags text[] not null default '{}';`
 - En subidas múltiples se omiten los libros que ya existen (mismo título y mismas páginas).
 - **✎** en el lector: corrige título, autor o categoría de un libro cuando la detección no acertó.
 - Filas automáticas: *Continuar leyendo*, *Agregados recientemente* y una por categoría.

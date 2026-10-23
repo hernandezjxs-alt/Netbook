@@ -174,3 +174,41 @@ label { display: grid; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
   max-width: min(90vw, 480px); padding: 0.7rem 1rem; border-radius: 8px;
   background: #333; color: #fff; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
+
+/* Filtros por etiqueta */
+.btn.small { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
+.filters {
+  display: flex; align-items: center; gap: 0.75rem; justify-content: space-between;
+  padding: 0.6rem var(--gutter) 0.2rem;
+}
+.chips { display: flex; gap: 0.5rem; overflow-x: auto; scrollbar-width: none; padding: 2px 0; flex: 1; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto; border: 1px solid #3a3a3a; border-radius: 999px; padding: 0.35rem 0.8rem;
+  background: transparent; color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer; white-space: nowrap;
+}
+.chip:hover { background: rgba(255, 255, 255, 0.1); }
+.chip.active { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
+.chip.small { padding: 0.2rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
+.filter-actions { display: flex; gap: 0.5rem; flex: 0 0 auto; }
+@media (max-width: 640px) { .filters { flex-direction: column; align-items: stretch; } .filter-actions { justify-content: flex-end; } }
+
+.sugs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.check { display: flex; align-items: center; gap: 0.5rem; }
+.check input { width: auto; }
+
+/* Modo selección */
+.check-badge {
+  display: none; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%;
+  align-items: center; justify-content: center; background: var(--red); color: #fff; font-weight: 700; font-size: 0.85rem;
+}
+body.selecting .card { outline: 2px dashed rgba(255, 255, 255, 0.25); outline-offset: -2px; }
+.card.selected { outline: 3px solid var(--red) !important; outline-offset: -3px; }
+.card.selected .check-badge { display: flex; }
+.selbar {
+  position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 45;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: center;
+  max-width: 96vw; padding: 0.6rem 0.9rem; border-radius: 12px;
+  background: #2a2a2a; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+body.selecting .toast { bottom: 5.5rem; }

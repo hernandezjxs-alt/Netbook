@@ -40,6 +40,14 @@
       <button id="btn-logout" class="btn ghost" type="button">Salir</button>
     </header>
 
+    <nav id="filters" class="filters" hidden aria-label="Filtros por etiqueta">
+      <div id="chips" class="chips"></div>
+      <div class="filter-actions">
+        <button id="btn-autotag" class="btn ghost small" type="button" hidden>✨ Etiquetar automático</button>
+        <button id="btn-select" class="btn ghost small" type="button">Seleccionar</button>
+      </div>
+    </nav>
+
     <section id="hero" class="hero" hidden>
       <img id="hero-img" alt="" class="hero-bg">
       <div class="hero-shade"></div>
@@ -79,10 +87,31 @@
         <input id="up-category" type="text" maxlength="60" list="category-list" value="General" required>
         <datalist id="category-list"></datalist>
       </label>
+      <label>Etiquetas (rol o género, separadas por coma)
+        <input id="up-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
+      </label>
+      <div id="up-tag-sugs" class="sugs"></div>
+      <label class="check"><input id="up-autotags" type="checkbox" checked> Sugerir etiquetas según el título</label>
       <p id="up-status" class="msg" role="status"></p>
       <div class="modal-actions">
         <button id="up-cancel" class="btn ghost" type="button">Cancelar</button>
         <button id="up-submit" class="btn primary" type="submit">Subir</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal para etiquetar varios libros -->
+  <div id="tag-modal" class="modal top" hidden>
+    <form id="tag-form" class="modal-card">
+      <h2>Etiquetar <span id="tg-count"></span></h2>
+      <label>Etiquetas a agregar (separadas por coma)
+        <input id="tg-tags" type="text" maxlength="200" placeholder="Analista BI" required>
+      </label>
+      <div id="tg-sugs" class="sugs"></div>
+      <p id="tg-status" class="msg" role="status"></p>
+      <div class="modal-actions">
+        <button id="tg-cancel" class="btn ghost" type="button">Cancelar</button>
+        <button class="btn primary" type="submit">Agregar</button>
       </div>
     </form>
   </div>
@@ -100,6 +129,10 @@
       <label>Categoría
         <input id="ed-category" type="text" maxlength="60" list="category-list" required>
       </label>
+      <label>Etiquetas (separadas por coma)
+        <input id="ed-tags" type="text" maxlength="200" placeholder="Analista de datos, IT">
+      </label>
+      <div id="ed-tag-sugs" class="sugs"></div>
       <p id="ed-status" class="msg" role="status"></p>
       <div class="modal-actions">
         <button id="ed-cancel" class="btn ghost" type="button">Cancelar</button>
@@ -129,6 +162,14 @@
       <p id="rd-status" class="muted"></p>
       <canvas id="page-canvas"></canvas>
     </div>
+  </div>
+
+  <!-- Barra del modo selección -->
+  <div id="selbar" class="selbar" hidden>
+    <span id="sel-count">0 seleccionados</span>
+    <button id="sel-all" class="btn ghost small" type="button">Todos los visibles</button>
+    <button id="sel-tag" class="btn primary small" type="button" disabled>Etiquetar</button>
+    <button id="sel-cancel" class="btn ghost small" type="button">Cancelar</button>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>

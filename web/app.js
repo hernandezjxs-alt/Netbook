@@ -22,7 +22,12 @@ const state = {
   progress: new Map(), // book_id -> { last_page, updated_at }
   covers: new Map(),   // book_id -> signed url
   query: "",
+  activeTags: new Set(), // etiquetas activas en el filtro (coincide con cualquiera)
+  selecting: false,      // modo selección múltiple
+  selected: new Set(),   // ids seleccionados
 };
+
+const NONE_TAG = "__none__"; // filtro especial: libros sin etiquetas
 
 /* ---------- Utilidades ---------- */
 
@@ -86,6 +91,10 @@ function setSession(session) {
     refresh();
   } else if (!state.user) {
     state.profile = null;
+    state.activeTags.clear();
+    state.selected.clear();
+    state.selecting = false;
+    document.body.classList.remove("selecting");
     renderBadge();
     state.books = [];
     state.progress.clear();
@@ -162,9 +171,15 @@ function cardEl(b) {
   const pct = p && b.pages ? clamp(Math.round((p.last_page / b.pages) * 100), 0, 100) : 0;
   return el(
     "button",
-    { class: "card", type: "button", title: b.title, onclick: () => openReader(b) },
+    {
+      class: "card" + (state.selected.has(b.id) ? " selected" : ""),
+      type: "button",
+      title: b.title,
+      onclick: (ev) => (state.selecting ? toggleSelect(b.id, ev.currentTarget) : openReader(b)),
+    },
     cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, b.title),
     el("div", { class: "card-info" }, el("strong", {}, b.title), el("span", {}, b.author || b.category)),
+    el("span", { class: "check-badge", "aria-hidden": "true" }, "✓"),
     pct > 0 ? el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })) : null
   );
 }
@@ -205,7 +220,7 @@ function continueReading() {
 function renderHero(resuming) {
   const hero = $("#hero");
   const book = resuming[0] || state.books[0];
-  if (!book || state.query.trim()) {
+  if (!book || isFiltering()) {
     hero.hidden = true;
     return;
   }
@@ -222,25 +237,122 @@ function renderHero(resuming) {
   $("#hero-btn").onclick = () => openReader(book);
 }
 
+/* ---------- Etiquetas y filtros ---------- */
+
+const tagsOf = (b) => b.tags || [];
+
+// [[etiqueta, cantidad], ...] ordenadas por cantidad y luego alfabéticamente.
+function allTags() {
+  const counts = new Map();
+  for (const b of state.books) for (const t of tagsOf(b)) counts.set(t, (counts.get(t) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"));
+}
+
+// Convierte "it, analista bi" en ["IT", "Analista BI"] respetando la escritura de etiquetas ya existentes.
+function normTags(text) {
+  const canon = new Map();
+  for (const t of NetbookMeta.DEFAULT_TAGS) canon.set(t.toLowerCase(), t);
+  for (const [t] of allTags()) canon.set(t.toLowerCase(), t);
+  const out = [];
+  for (const raw of String(text || "").split(",")) {
+    const t = raw.replace(/\s+/g, " ").trim().slice(0, 30);
+    if (!t) continue;
+    const name = canon.get(t.toLowerCase()) || t;
+    if (!out.some((x) => x.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  return out.slice(0, 10);
+}
+
+function unionTags(current, added) {
+  const out = [...current];
+  for (const t of added) if (!out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+  return out.slice(0, 10);
+}
+
+// Botones "+ Etiqueta" para agregar rápido al campo de texto.
+function renderSuggestions(container, input) {
+  const names = [...new Set([...allTags().map(([t]) => t), ...NetbookMeta.DEFAULT_TAGS])];
+  container.replaceChildren(
+    ...names.map((t) =>
+      el(
+        "button",
+        {
+          type: "button",
+          class: "chip small",
+          onclick: () => {
+            input.value = unionTags(normTags(input.value), [t]).join(", ");
+          },
+        },
+        `+ ${t}`
+      )
+    )
+  );
+}
+
+function matchesFilters(b) {
+  const q = state.query.trim().toLowerCase();
+  if (q && ![b.title, b.author, b.category, ...tagsOf(b)].some((v) => (v || "").toLowerCase().includes(q))) {
+    return false;
+  }
+  if (state.activeTags.size) {
+    const tags = tagsOf(b);
+    const untagged = state.activeTags.has(NONE_TAG) && tags.length === 0;
+    if (!untagged && !tags.some((t) => state.activeTags.has(t))) return false;
+  }
+  return true;
+}
+
+const isFiltering = () => state.query.trim() !== "" || state.activeTags.size > 0;
+const visibleBooks = () => state.books.filter(matchesFilters);
+
+function toggleTag(key) {
+  if (key === null) state.activeTags.clear();
+  else if (state.activeTags.has(key)) state.activeTags.delete(key);
+  else state.activeTags.add(key);
+  render();
+}
+
+function renderFilters() {
+  const nav = $("#filters");
+  nav.hidden = !state.books.length;
+  if (!state.books.length) return;
+  const untagged = state.books.filter((b) => !tagsOf(b).length).length;
+  const chip = (label, key, count, active) =>
+    el("button", { type: "button", class: "chip" + (active ? " active" : ""), onclick: () => toggleTag(key) }, `${label} (${count})`);
+  $("#chips").replaceChildren(
+    ...[
+      chip("Todos", null, state.books.length, state.activeTags.size === 0),
+      ...allTags().map(([t, n]) => chip(t, t, n, state.activeTags.has(t))),
+      untagged ? chip("Sin etiqueta", NONE_TAG, untagged, state.activeTags.has(NONE_TAG)) : null,
+    ].filter(Boolean)
+  );
+  $("#btn-autotag").hidden = !untagged;
+  $("#btn-select").textContent = state.selecting ? "Salir de selección" : "Seleccionar";
+}
+
 function render() {
   const rows = $("#rows");
   rows.replaceChildren();
   const hasBooks = state.books.length > 0;
   $("#empty").hidden = hasBooks || !state.user;
+  renderFilters();
+  updateSelbar();
   if (!hasBooks) {
     $("#hero").hidden = true;
     return;
   }
 
-  const q = state.query.trim().toLowerCase();
   const resuming = continueReading();
   renderHero(resuming);
 
-  if (q) {
-    const hits = state.books.filter((b) =>
-      [b.title, b.author, b.category].some((v) => (v || "").toLowerCase().includes(q))
-    );
-    rows.append(rowEl(`Resultados para "${state.query.trim()}"`, hits, true));
+  if (isFiltering()) {
+    const hits = visibleBooks();
+    const parts = [];
+    if (state.query.trim()) parts.push(`"${state.query.trim()}"`);
+    if (state.activeTags.size) {
+      parts.push([...state.activeTags].map((t) => (t === NONE_TAG ? "Sin etiqueta" : t)).join(" o "));
+    }
+    rows.append(rowEl(`Resultados: ${parts.join(" · ")} (${hits.length})`, hits, true));
     return;
   }
 
@@ -258,6 +370,109 @@ function render() {
     .forEach((cat) => rows.append(rowEl(cat, groups.get(cat))));
 }
 
+/* ---------- Modo selección y etiquetado masivo ---------- */
+
+function updateSelbar() {
+  $("#selbar").hidden = !state.selecting;
+  $("#sel-count").textContent = `${state.selected.size} seleccionado(s)`;
+  $("#sel-tag").disabled = state.selected.size === 0;
+}
+
+function setSelecting(on) {
+  state.selecting = on;
+  state.selected.clear();
+  document.body.classList.toggle("selecting", on);
+  render();
+}
+
+function toggleSelect(id, node) {
+  if (state.selected.has(id)) state.selected.delete(id);
+  else state.selected.add(id);
+  node.classList.toggle("selected", state.selected.has(id));
+  updateSelbar();
+}
+
+// Aplica etiquetas agrupando libros con el mismo resultado para hacer pocas peticiones.
+// Devuelve null si todo salió bien o el mensaje de error.
+async function applyTagUpdates(updates) {
+  const groups = new Map();
+  for (const u of updates) {
+    const key = u.tags.join("\u0001");
+    if (!groups.has(key)) groups.set(key, { tags: u.tags, books: [] });
+    groups.get(key).books.push(u.book);
+  }
+  for (const g of groups.values()) {
+    for (let i = 0; i < g.books.length; i += 100) {
+      const chunk = g.books.slice(i, i + 100);
+      const { error } = await sb.from("books").update({ tags: g.tags }).in("id", chunk.map((b) => b.id));
+      if (error) return error.message;
+      chunk.forEach((b) => (b.tags = g.tags));
+    }
+  }
+  return null;
+}
+
+$("#btn-select").addEventListener("click", () => setSelecting(!state.selecting));
+$("#sel-cancel").addEventListener("click", () => setSelecting(false));
+$("#sel-all").addEventListener("click", () => {
+  state.selected = new Set(visibleBooks().map((b) => b.id));
+  render();
+});
+
+$("#sel-tag").addEventListener("click", () => {
+  $("#tg-count").textContent = `${state.selected.size} libro(s)`;
+  $("#tg-tags").value = "";
+  $("#tg-status").textContent = "";
+  renderSuggestions($("#tg-sugs"), $("#tg-tags"));
+  $("#tag-modal").hidden = false;
+});
+$("#tg-cancel").addEventListener("click", () => ($("#tag-modal").hidden = true));
+
+$("#tag-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const added = normTags($("#tg-tags").value);
+  if (!added.length) {
+    $("#tg-status").textContent = "Escribe al menos una etiqueta.";
+    return;
+  }
+  const updates = state.books
+    .filter((b) => state.selected.has(b.id))
+    .map((book) => ({ book, tags: unionTags(tagsOf(book), added) }));
+  const err = await applyTagUpdates(updates);
+  if (err) {
+    $("#tg-status").textContent = `No se pudo guardar: ${err}`;
+    render();
+    return;
+  }
+  $("#tag-modal").hidden = true;
+  toast(`Etiquetas agregadas a ${updates.length} libro(s)`);
+  setSelecting(false);
+});
+
+$("#btn-autotag").addEventListener("click", async () => {
+  const untagged = state.books.filter((b) => !tagsOf(b).length);
+  const updates = untagged
+    .map((book) => ({ book, tags: NetbookMeta.suggestTags(book.title) }))
+    .filter((u) => u.tags.length);
+  if (!updates.length) {
+    toast("Ningún título sin etiqueta coincide con las reglas. Etiquétalos con «Seleccionar».", 7000);
+    return;
+  }
+  const ok = confirm(
+    `Se etiquetarán ${updates.length} de ${untagged.length} libros sin etiqueta según palabras de su título. ` +
+      "Podrás corregirlas después. ¿Continuar?"
+  );
+  if (!ok) return;
+  const err = await applyTagUpdates(updates);
+  render();
+  toast(
+    err
+      ? `Se interrumpió: ${err}`
+      : `${updates.length} libro(s) etiquetados. Quedan ${untagged.length - updates.length} sin etiqueta.`,
+    7000
+  );
+});
+
 $("#search").addEventListener("input", (e) => {
   state.query = e.target.value;
   render();
@@ -273,6 +488,8 @@ function openUpload() {
   $("#up-cancel").disabled = false;
   $("#single-fields").hidden = false;
   $("#up-title").required = true;
+  lastAutoTags = "";
+  renderSuggestions($("#up-tag-sugs"), $("#up-tags"));
   const cats = [...new Set(state.books.map((b) => b.category).filter(Boolean))].sort();
   $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
   $("#upload-modal").hidden = false;
@@ -293,6 +510,7 @@ function upStatus(text, info = true) {
 }
 
 let guessToken = 0;
+let lastAutoTags = ""; // última sugerencia puesta automáticamente en el campo de etiquetas
 
 async function guessFromFile(file) {
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
@@ -313,7 +531,10 @@ $("#up-file").addEventListener("change", async (e) => {
   $("#up-author").value = "";
   upStatus("");
   if (multi) {
-    upStatus(`${files.length} archivos seleccionados: el título y el autor se detectan solos leyendo cada portada.`);
+    upStatus(
+      `${files.length} archivos seleccionados: el título y el autor se detectan solos leyendo cada portada. ` +
+        "Las etiquetas que escribas se aplican a todos."
+    );
     return;
   }
   const file = files[0];
@@ -324,6 +545,11 @@ $("#up-file").addEventListener("change", async (e) => {
     if (token !== guessToken) return;
     $("#up-title").value = g.title;
     $("#up-author").value = g.author || "";
+    const cur = $("#up-tags").value.trim();
+    if ($("#up-autotags").checked && (cur === "" || cur === lastAutoTags)) {
+      lastAutoTags = NetbookMeta.suggestTags(g.title).join(", ");
+      $("#up-tags").value = lastAutoTags;
+    }
     upStatus(
       g.source === "filename"
         ? "No se encontró el título dentro del PDF, se usó el nombre del archivo. Revísalo."
@@ -371,6 +597,7 @@ async function uploadOne(file, meta) {
     let { title, author } = meta;
     let source = "manual";
     let key = null;
+    let tags = meta.tags || [];
 
     if (meta.auto) {
       const g = await NetbookMeta.guessMeta(pdf, file.name);
@@ -379,6 +606,7 @@ async function uploadOne(file, meta) {
       source = g.source;
       key = `${title.toLowerCase()}|${pages}`;
       if (meta.known.has(key)) return { skipped: true };
+      tags = unionTags(meta.userTags, meta.autoTags ? NetbookMeta.suggestTags(title) : []);
     }
 
     const coverBlob = await renderCover(pdf);
@@ -396,6 +624,7 @@ async function uploadOne(file, meta) {
       title,
       author: author || null,
       category: meta.category,
+      tags,
       pages,
       pdf_path: pdfPath,
       cover_path: coverPath,
@@ -422,6 +651,8 @@ $("#upload-form").addEventListener("submit", async (e) => {
   const cancel = $("#up-cancel");
   const multi = files.length > 1;
   const category = $("#up-category").value.trim() || "General";
+  const userTags = normTags($("#up-tags").value);
+  const autoTags = $("#up-autotags").checked;
 
   submit.disabled = true;
   cancel.disabled = true;
@@ -436,14 +667,19 @@ $("#upload-form").addEventListener("submit", async (e) => {
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     upStatus(`Subiendo ${i + 1} de ${files.length}: ${f.name}`);
-    const meta = multi
-      ? { auto: true, known, category }
-      : {
-          auto: false,
-          title: $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name),
-          author: $("#up-author").value.trim() || null,
-          category,
-        };
+    let meta;
+    if (multi) {
+      meta = { auto: true, known, category, userTags, autoTags };
+    } else {
+      const title = $("#up-title").value.trim() || NetbookMeta.cleanFilename(f.name);
+      meta = {
+        auto: false,
+        title,
+        author: $("#up-author").value.trim() || null,
+        category,
+        tags: userTags.length || !autoTags ? userTags : NetbookMeta.suggestTags(title),
+      };
+    }
     const res = await uploadOne(f, meta);
     if (res.error) failed.push(`${f.name} (${res.error})`);
     else if (res.skipped) skipped.push(f.name);
@@ -667,6 +903,8 @@ function openEdit() {
   $("#ed-title").value = b.title;
   $("#ed-author").value = b.author || "";
   $("#ed-category").value = b.category || "General";
+  $("#ed-tags").value = tagsOf(b).join(", ");
+  renderSuggestions($("#ed-tag-sugs"), $("#ed-tags"));
   $("#ed-status").textContent = "";
   const cats = [...new Set(state.books.map((x) => x.category).filter(Boolean))].sort();
   $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
@@ -687,6 +925,7 @@ $("#edit-form").addEventListener("submit", async (e) => {
     title: $("#ed-title").value.trim(),
     author: $("#ed-author").value.trim() || null,
     category: $("#ed-category").value.trim() || "General",
+    tags: normTags($("#ed-tags").value),
   };
   const { error } = await sb.from("books").update(patch).eq("id", b.id);
   if (error) {
@@ -700,6 +939,10 @@ $("#edit-form").addEventListener("submit", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (!$("#tag-modal").hidden) {
+    if (e.key === "Escape") $("#tag-modal").hidden = true;
+    return;
+  }
   if (!$("#edit-modal").hidden) {
     if (e.key === "Escape") closeEdit();
     return;

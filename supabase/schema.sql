@@ -10,6 +10,7 @@ create table if not exists public.books (
   title        text not null,
   author       text,
   category     text not null default 'General',
+  tags         text[] not null default '{}',  -- etiquetas para filtrar (rol o género)
   pages        int,
   pdf_path     text not null,
   cover_path   text,
