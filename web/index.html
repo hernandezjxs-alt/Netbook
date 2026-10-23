@@ -60,6 +60,8 @@
       <h1 class="logo">NETBOOK</h1>
       <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
       <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
+      <button id="btn-theme" class="icon" type="button" aria-label="Cambiar tema claro u oscuro" title="Tema claro / oscuro">🌓</button>
+      <button id="btn-stats" class="icon" type="button" aria-label="Estadísticas" title="Estadísticas y exportar">📊</button>
       <button id="btn-contact" class="icon" type="button" aria-label="Contacto" title="Contacto">✉</button>
       <button id="btn-users" class="icon" type="button" aria-label="Usuarios" title="Usuarios" hidden>👥</button>
       <button id="btn-inbox" class="icon" type="button" aria-label="Mensajes recibidos" title="Mensajes recibidos" hidden>📨<span id="inbox-count" class="dot" hidden></span></button>
@@ -70,6 +72,14 @@
     <nav id="filters" class="filters" hidden aria-label="Filtros por etiqueta">
       <div id="chips" class="chips"></div>
       <div class="filter-actions">
+        <select id="sort" class="select small" aria-label="Ordenar por">
+          <option value="recent">Recientes</option>
+          <option value="title">Título A–Z</option>
+          <option value="author">Autor A–Z</option>
+          <option value="read">Más leídos</option>
+          <option value="pages">Más páginas</option>
+        </select>
+        <button id="btn-view" class="btn ghost small" type="button" title="Cambiar vista" aria-label="Cambiar vista">☰ Lista</button>
         <button id="btn-autotag" class="btn ghost small" type="button" hidden>✨ Etiquetar automático</button>
         <button id="btn-select" class="btn ghost small" type="button">Seleccionar</button>
       </div>
@@ -244,6 +254,58 @@
     </div>
   </div>
 
+  <!-- Detalle del libro -->
+  <div id="detail-modal" class="modal top" hidden>
+    <div class="modal-card detail-card" role="dialog" aria-modal="true">
+      <div class="detail-head">
+        <img id="dt-cover" alt="" class="dt-cover">
+        <div class="dt-info">
+          <h2 id="dt-title"></h2>
+          <p id="dt-author" class="muted"></p>
+          <p id="dt-meta" class="muted small-text"></p>
+          <div id="dt-tags" class="sugs"></div>
+        </div>
+      </div>
+      <div id="dt-progress" class="dt-progress" hidden><i></i></div>
+      <p id="dt-progress-text" class="muted small-text"></p>
+      <div class="detail-actions">
+        <button id="dt-read" class="btn primary" type="button">▶ Leer</button>
+        <button id="dt-fav" class="btn ghost" type="button">♡ Favorito</button>
+        <button id="dt-share" class="btn ghost" type="button">🔗 Compartir</button>
+        <button id="dt-download" class="btn ghost" type="button">⬇ Descargar</button>
+        <button id="dt-edit" class="btn ghost" type="button">✎ Editar</button>
+        <button id="dt-delete" class="btn ghost" type="button">🗑 Eliminar</button>
+      </div>
+      <div class="modal-actions"><button id="dt-close" class="btn ghost" type="button">Cerrar</button></div>
+    </div>
+  </div>
+
+  <!-- Marcadores -->
+  <div id="bm-modal" class="modal top" hidden>
+    <div class="modal-card contact-card">
+      <h2>Marcadores</h2>
+      <form id="bm-form" class="bm-form">
+        <input id="bm-note" type="text" maxlength="300" placeholder="Nota (opcional)">
+        <button class="btn primary small" type="submit">🔖 Marcar página <span id="bm-page"></span></button>
+      </form>
+      <div id="bm-list" class="inbox"></div>
+      <div class="modal-actions"><button id="bm-close" class="btn ghost" type="button">Cerrar</button></div>
+    </div>
+  </div>
+
+  <!-- Estadísticas -->
+  <div id="stats-modal" class="modal top" hidden>
+    <div class="modal-card contact-card">
+      <h2>Tu biblioteca</h2>
+      <div id="stats-body" class="stats"></div>
+      <div class="modal-actions">
+        <button id="st-csv" class="btn ghost small" type="button">⬇ Lista (CSV)</button>
+        <button id="st-json" class="btn ghost small" type="button">⬇ Respaldo (JSON)</button>
+        <button id="st-close" class="btn primary" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal de edición (se muestra sobre el lector) -->
   <div id="edit-modal" class="modal top" hidden>
     <form id="edit-form" class="modal-card">
@@ -283,6 +345,8 @@
         <button id="rd-zoom-out" class="icon" type="button" aria-label="Alejar">−</button>
         <span id="rd-zoom" class="muted">100%</span>
         <button id="rd-zoom-in" class="icon" type="button" aria-label="Acercar">+</button>
+        <button id="rd-bm" class="icon" type="button" aria-label="Marcadores" title="Marcadores">🔖</button>
+        <button id="rd-mode" class="icon" type="button" aria-label="Modo de lectura" title="Modo de lectura (normal, sepia, noche)">🌗</button>
         <button id="rd-share" class="icon" type="button" aria-label="Compartir enlace" title="Compartir enlace (válido 7 días)">🔗</button>
         <button id="rd-download" class="icon" type="button" aria-label="Descargar PDF" title="Descargar PDF">⬇</button>
         <button id="rd-edit" class="icon" type="button" aria-label="Editar título y autor" title="Editar título y autor">✎</button>

@@ -79,6 +79,14 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 - Lector: flechas del teclado o deslizar en el móvil, zoom, y el progreso se guarda solo.
 - Para eliminar un libro, ábrelo y usa el botón 🗑.
 
+## Experiencia de lectura
+
+- Tocar un libro abre su **detalle** (portada, datos, progreso, favorito, compartir, descargar, editar, eliminar).
+- **Orden** (recientes, título, autor, más leídos, páginas) y **vista de lista o cuadrícula**; **♥ Favoritos** como filtro y fila.
+- Lector con modos *normal / sepia / noche*, un toque en la página oculta la barra, y **marcadores con notas** (🔖).
+- 📊 **Estadísticas** (almacenamiento usado frente a 1 GB) y exportación de la lista en CSV o un respaldo JSON de los datos.
+- Tema claro/oscuro (🌓) y app instalable (`sw.js`; sin internet solo abre la interfaz, no los libros).
+
 ## Cuentas, perfil y administración
 
 - Al crear cuenta se piden nombre completo, **RUT** (se valida el dígito verificador, también en la base de datos), correo y

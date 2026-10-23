@@ -79,3 +79,20 @@ create policy "storage_update_own" on storage.objects
 create policy "storage_delete_own" on storage.objects
   for delete to authenticated
   using (bucket_id in ('pdfs','covers') and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Favoritos, tamaño y marcadores (migración "favorites_bookmarks_sizes")
+alter table public.books add column if not exists favorite boolean not null default false;
+alter table public.books add column if not exists size_bytes bigint;
+create table if not exists public.bookmarks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  book_id uuid not null references public.books(id) on delete cascade,
+  page integer not null check (page >= 1),
+  note text check (note is null or char_length(note) <= 300),
+  created_at timestamptz not null default now()
+);
+create index if not exists bookmarks_book_idx on public.bookmarks (book_id);
+alter table public.bookmarks enable row level security;
+create policy "marcadores propios: leer" on public.bookmarks for select to authenticated using (auth.uid() = user_id);
+create policy "marcadores propios: crear" on public.bookmarks for insert to authenticated with check (auth.uid() = user_id);
+create policy "marcadores propios: borrar" on public.bookmarks for delete to authenticated using (auth.uid() = user_id);

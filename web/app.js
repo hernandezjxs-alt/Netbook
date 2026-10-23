@@ -56,7 +56,21 @@ function renderCategoryChips(container, input) {
   container.replaceChildren(...names.map((c) => mk(c, true)), ...rest.map((c) => mk(c, false)));
 }
 
-const NONE_TAG = "__none__"; // filtro especial: libros sin etiquetas
+const NONE_TAG = "__none__";
+const FAV_TAG = "__fav__"; // filtro especial: favoritos
+
+// Preferencias de interfaz guardadas en el navegador (con tolerancia a fallos).
+const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { /* modo privado */ } };
+state.sort = pref("nb_sort", "recent");
+state.view = pref("nb_view", "grid");
+state.loading = true;
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "light" ? "#f6f6f9" : "#0b0b10");
+}
+applyTheme(pref("nb_theme", "dark")); // filtro especial: libros sin etiquetas
 
 /* ---------- Utilidades ---------- */
 
@@ -327,10 +341,13 @@ async function refresh() {
   ]);
   const err = booksRes.error || progRes.error;
   if (err) {
+    state.loading = false;
+    render();
     toast(`No se pudo cargar la biblioteca: ${err.message}`);
     return;
   }
   state.books = booksRes.data;
+  state.loading = false;
   state.progress = new Map(progRes.data.map((p) => [p.book_id, p]));
   await loadCovers();
   render();
@@ -361,7 +378,7 @@ function cardEl(b, rank = null, stat = null) {
       class: "card" + (state.selected.has(b.id) ? " selected" : ""),
       type: "button",
       title: b.title,
-      onclick: (ev) => (state.selecting ? toggleSelect(b.id, ev.currentTarget) : openReader(b)),
+      onclick: (ev) => (state.selecting ? toggleSelect(b.id, ev.currentTarget) : openDetail(b)),
     },
     cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, b.title),
     el("div", { class: "card-info" }, el("strong", {}, b.title), el("span", {}, b.author || b.category)),
@@ -371,6 +388,7 @@ function cardEl(b, rank = null, stat = null) {
       onclick: (ev) => { ev.stopPropagation(); openEdit(b); },
       onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.stopPropagation(); openEdit(b); } },
     }, "✎"),
+    b.favorite && !rank ? el("span", { class: "fav-badge", "aria-label": "Favorito" }, "♥") : null,
     rank ? el("span", { class: "rank" + (rank <= 3 ? " top" : "") }, `#${rank}`) : null,
     stat ? el("span", { class: "stat" }, stat) : null,
     pct > 0 ? el("div", { class: "bar" }, el("i", { style: `width:${pct}%` })) : null
@@ -413,7 +431,7 @@ function continueReading() {
 function renderHero(resuming) {
   const hero = $("#hero");
   const book = resuming[0] || state.books[0];
-  if (!book || isFiltering()) {
+  if (!book || isFiltering() || customView()) {
     hero.hidden = true;
     return;
   }
@@ -494,12 +512,54 @@ function matchesFilters(b) {
   if (state.activeTags.size) {
     const tags = tagsOf(b);
     const untagged = state.activeTags.has(NONE_TAG) && tags.length === 0;
-    if (!untagged && !tags.some((t) => state.activeTags.has(t))) return false;
+    const fav = state.activeTags.has(FAV_TAG) && !!b.favorite;
+    if (!untagged && !fav && !tags.some((t) => state.activeTags.has(t))) return false;
   }
   return true;
 }
 
 const isFiltering = () => state.query.trim() !== "" || state.activeTags.size > 0;
+const customView = () => state.sort !== "recent" || state.view === "list";
+
+const SORTS = {
+  recent: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+  title: (a, b) => a.title.localeCompare(b.title, "es"),
+  author: (a, b) => (a.author || "\uffff").localeCompare(b.author || "\uffff", "es") || a.title.localeCompare(b.title, "es"),
+  read: (a, b) => (b.opens || 0) - (a.opens || 0) || a.title.localeCompare(b.title, "es"),
+  pages: (a, b) => (b.pages || 0) - (a.pages || 0),
+};
+const sortedBooks = (list) => [...list].sort(SORTS[state.sort] || SORTS.recent);
+
+// Vista de lista: miniatura + datos en una línea.
+function listItemEl(b) {
+  const cover = state.covers.get(b.id);
+  const p = state.progress.get(b.id);
+  const pct = p && b.pages ? clamp(Math.round((p.last_page / b.pages) * 100), 0, 100) : 0;
+  return el(
+    "div",
+    {
+      class: "list-item" + (state.selected.has(b.id) ? " selected" : ""),
+      role: "button", tabindex: "0",
+      onclick: (ev) => (state.selecting ? toggleSelect(b.id, ev.currentTarget) : openDetail(b)),
+      onkeydown: (ev) => { if (ev.key === "Enter") ev.currentTarget.click(); },
+    },
+    cover ? el("img", { src: cover, alt: "", loading: "lazy" }) : el("div", { class: "ph" }, "📕"),
+    el(
+      "div",
+      { class: "li-body" },
+      el("strong", {}, (b.favorite ? "♥ " : "") + b.title),
+      el("span", { class: "muted" }, [b.author, b.category, b.pages ? `${b.pages} pág.` : null].filter(Boolean).join(" · ")),
+      tagsOf(b).length ? el("span", { class: "li-tags" }, tagsOf(b).join(" · ")) : null,
+      pct > 0 ? el("div", { class: "bar inline" }, el("i", { style: `width:${pct}%` })) : null
+    ),
+    state.selecting ? null : el("button", { class: "icon", type: "button", title: "Editar", "aria-label": "Editar", onclick: (ev) => { ev.stopPropagation(); openEdit(b); } }, "✎")
+  );
+}
+
+function skeletonRows() {
+  const row = el("section", { class: "row" }, el("div", { class: "skel-title" }), el("div", { class: "strip" }, Array.from({ length: 8 }, () => el("div", { class: "card skel" }))));
+  return [row, row.cloneNode(true)];
+}
 const visibleBooks = () => state.books.filter(matchesFilters);
 
 function toggleTag(key) {
@@ -514,11 +574,15 @@ function renderFilters() {
   nav.hidden = !state.books.length;
   if (!state.books.length) return;
   const untagged = state.books.filter((b) => !tagsOf(b).length).length;
+  const favs = state.books.filter((b) => b.favorite).length;
+  $("#sort").value = state.sort;
+  $("#btn-view").textContent = state.view === "list" ? "▦ Cuadrícula" : "☰ Lista";
   const chip = (label, key, count, active) =>
     el("button", { type: "button", class: "chip" + (active ? " active" : ""), onclick: () => toggleTag(key) }, `${label} (${count})`);
   $("#chips").replaceChildren(
     ...[
       chip("Todos", null, state.books.length, state.activeTags.size === 0),
+      favs ? chip("♥ Favoritos", FAV_TAG, favs, state.activeTags.has(FAV_TAG)) : null,
       ...allTags().map(([t, n]) => chip(t, t, n, state.activeTags.has(t))),
       untagged ? chip("Sin etiqueta", NONE_TAG, untagged, state.activeTags.has(NONE_TAG)) : null,
     ].filter(Boolean)
@@ -531,7 +595,12 @@ function render() {
   const rows = $("#rows");
   rows.replaceChildren();
   const hasBooks = state.books.length > 0;
-  $("#empty").hidden = hasBooks || !state.user;
+  $("#empty").hidden = hasBooks || !state.user || state.loading;
+  if (state.loading && state.user && !hasBooks) {
+    $("#hero").hidden = true;
+    rows.append(...skeletonRows());
+    return;
+  }
   renderFilters();
   updateSelbar();
   if (!hasBooks) {
@@ -542,14 +611,21 @@ function render() {
   const resuming = continueReading();
   renderHero(resuming);
 
-  if (isFiltering()) {
-    const hits = visibleBooks();
+  if (isFiltering() || customView()) {
+    const hits = sortedBooks(visibleBooks());
     const parts = [];
     if (state.query.trim()) parts.push(`"${state.query.trim()}"`);
     if (state.activeTags.size) {
-      parts.push([...state.activeTags].map((t) => (t === NONE_TAG ? "Sin etiqueta" : t)).join(" o "));
+      parts.push([...state.activeTags].map((t) => (t === NONE_TAG ? "Sin etiqueta" : t === FAV_TAG ? "Favoritos" : t)).join(" o "));
     }
-    rows.append(rowEl(`Resultados: ${parts.join(" · ")} (${hits.length})`, hits, true));
+    const heading = parts.length ? `Resultados: ${parts.join(" · ")} (${hits.length})` : `Biblioteca (${hits.length})`;
+    if (state.view === "list") {
+      const sec = el("section", { class: "row" }, el("h2", {}, heading));
+      sec.append(hits.length ? el("div", { class: "list" }, hits.map(listItemEl)) : el("p", { class: "muted" }, "Sin resultados."));
+      rows.append(sec);
+    } else {
+      rows.append(rowEl(heading, hits, true));
+    }
     return;
   }
 
@@ -558,6 +634,8 @@ function render() {
   if (mostRead.length) rows.append(rowEl("🔥 Más leídos", mostRead, false, (b, i) => [i + 1, `${b.opens} 👁`]));
   const mostDl = state.books.filter((b) => (b.downloads || 0) > 0).sort((a, b) => b.downloads - a.downloads).slice(0, 10);
   if (mostDl.length) rows.append(rowEl("⬇ Más descargados", mostDl, false, (b, i) => [i + 1, `${b.downloads} ⬇`]));
+  const favBooks = state.books.filter((b) => b.favorite);
+  if (favBooks.length) rows.append(rowEl("♥ Mis favoritos", favBooks.slice(0, 20)));
   rows.append(rowEl("Agregados recientemente", state.books.slice(0, 15)));
 
   const groups = new Map();
@@ -964,6 +1042,7 @@ async function uploadOne(file, meta) {
       category: meta.category,
       tags,
       pages,
+      size_bytes: file.size,
       pdf_path: pdfPath,
       cover_path: coverPath,
     });
@@ -1183,9 +1262,14 @@ function go(n) {
     updateReaderUI();
     return;
   }
+  const dir = target > reader.page ? "next" : "prev";
   reader.page = target;
   $("#stage").scrollTop = 0;
   updateReaderUI();
+  const cv = $("#page-canvas");
+  cv.classList.remove("flip-next", "flip-prev");
+  void cv.offsetWidth;
+  cv.classList.add(`flip-${dir}`);
   renderPage();
 }
 
@@ -1234,8 +1318,8 @@ async function closeReader({ skipSave = false } = {}) {
   render();
 }
 
-async function deleteBook() {
-  const b = reader.book;
+async function deleteBook(book) {
+  const b = book && book.id ? book : reader.book;
   if (!b) return;
   const yes = await askConfirm("Eliminar libro", [el("p", {}, `¿Eliminar «${b.title}»? Esta acción no se puede deshacer.`)], "Eliminar");
   if (!yes) return;
@@ -1246,7 +1330,8 @@ async function deleteBook() {
   }
   await sb.storage.from("pdfs").remove([b.pdf_path]);
   if (b.cover_path) await sb.storage.from("covers").remove([b.cover_path]);
-  await closeReader({ skipSave: true });
+  if (reader.book?.id === b.id) await closeReader({ skipSave: true });
+  $("#detail-modal").hidden = true;
   await refresh();
   toast("Libro eliminado");
 }
@@ -1257,12 +1342,11 @@ $("#rd-next").addEventListener("click", () => go(reader.page + 1));
 $("#rd-page").addEventListener("change", (e) => go(e.target.value));
 $("#rd-zoom-in").addEventListener("click", () => setZoom(reader.zoom + 0.25));
 $("#rd-zoom-out").addEventListener("click", () => setZoom(reader.zoom - 0.25));
-$("#rd-delete").addEventListener("click", deleteBook);
+$("#rd-delete").addEventListener("click", () => deleteBook());
 
 const safeName = (t) => t.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80) || "libro";
 
-$("#rd-share").addEventListener("click", async () => {
-  const b = reader.book;
+async function shareBook(b) {
   if (!b) return;
   try {
     const { data, error } = await sb.storage.from("pdfs").createSignedUrl(b.pdf_path, 7 * 24 * 3600);
@@ -1281,10 +1365,9 @@ $("#rd-share").addEventListener("click", async () => {
   } catch (err) {
     toast(`No se pudo compartir: ${err?.message || err}`, 7000);
   }
-});
+}
 
-$("#rd-download").addEventListener("click", async () => {
-  const b = reader.book;
+async function downloadBook(b) {
   if (!b) return;
   try {
     const { data, error } = await sb.storage.from("pdfs").createSignedUrl(b.pdf_path, 3600, { download: `${safeName(b.title)}.pdf` });
@@ -1298,7 +1381,10 @@ $("#rd-download").addEventListener("click", async () => {
   } catch (err) {
     toast(`No se pudo descargar: ${err?.message || err}`, 7000);
   }
-});
+}
+
+$("#rd-share").addEventListener("click", () => shareBook(reader.book));
+$("#rd-download").addEventListener("click", () => downloadBook(reader.book));
 
 /* ---------- Editar libro ---------- */
 
@@ -1350,6 +1436,10 @@ $("#edit-form").addEventListener("submit", async (e) => {
 document.addEventListener("keydown", (e) => {
   if (!$("#confirm-modal").hidden) {
     if (e.key === "Escape") $("#cf-cancel").click();
+    return;
+  }
+  if (!$("#bm-modal").hidden || !$("#stats-modal").hidden || !$("#detail-modal").hidden) {
+    if (e.key === "Escape") { $("#bm-modal").hidden = true; $("#stats-modal").hidden = true; closeDetail(); }
     return;
   }
   if (!$("#legal-modal").hidden) {
@@ -1560,6 +1650,238 @@ $("#btn-users").addEventListener("click", async () => {
   $("#users-modal").hidden = false;
 });
 $("#users-close").addEventListener("click", () => ($("#users-modal").hidden = true));
+
+/* ---------- Tema, orden y vista ---------- */
+
+$("#btn-theme").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  applyTheme(next);
+  setPref("nb_theme", next);
+});
+$("#sort").addEventListener("change", (e) => {
+  state.sort = e.target.value;
+  setPref("nb_sort", state.sort);
+  render();
+});
+$("#btn-view").addEventListener("click", () => {
+  state.view = state.view === "list" ? "grid" : "list";
+  setPref("nb_view", state.view);
+  render();
+});
+
+/* ---------- Detalle del libro y favoritos ---------- */
+
+let detailBook = null;
+
+function renderDetail() {
+  const b = detailBook;
+  if (!b) return;
+  const cover = state.covers.get(b.id);
+  const img = $("#dt-cover");
+  if (cover) img.src = cover;
+  else img.removeAttribute("src");
+  img.hidden = !cover;
+  $("#dt-title").textContent = b.title;
+  $("#dt-author").textContent = b.author || "Autor sin indicar";
+  const bits = [b.category, b.pages ? `${b.pages} páginas` : null, b.size_bytes ? fmtMB(b.size_bytes) : null,
+    (b.opens || 0) ? `${b.opens} lectura(s)` : null, (b.downloads || 0) ? `${b.downloads} descarga(s)` : null].filter(Boolean);
+  $("#dt-meta").textContent = bits.join(" · ");
+  $("#dt-tags").replaceChildren(...tagsOf(b).map((t) => el("span", { class: "chip small" }, t)));
+  const p = state.progress.get(b.id);
+  const pct = p && b.pages ? clamp(Math.round((p.last_page / b.pages) * 100), 0, 100) : 0;
+  $("#dt-progress").hidden = pct === 0;
+  $("#dt-progress i").style.width = `${pct}%`;
+  $("#dt-progress-text").textContent = pct ? `Vas en la página ${p.last_page} de ${b.pages} (${pct}%)` : "Aún no lo empiezas.";
+  $("#dt-read").textContent = pct > 0 && pct < 100 ? "▶ Continuar" : "▶ Leer";
+  $("#dt-fav").textContent = b.favorite ? "♥ En favoritos" : "♡ Favorito";
+  $("#dt-fav").classList.toggle("on", !!b.favorite);
+}
+
+function openDetail(b) {
+  detailBook = b;
+  renderDetail();
+  $("#detail-modal").hidden = false;
+}
+function closeDetail() {
+  $("#detail-modal").hidden = true;
+  detailBook = null;
+}
+
+async function toggleFavorite(b) {
+  const next = !b.favorite;
+  const { error } = await sb.from("books").update({ favorite: next }).eq("id", b.id);
+  if (error) {
+    toast(`No se pudo guardar el favorito: ${error.message}`);
+    return;
+  }
+  b.favorite = next;
+  renderDetail();
+  render();
+}
+
+$("#dt-close").addEventListener("click", closeDetail);
+$("#dt-read").addEventListener("click", () => {
+  const b = detailBook;
+  closeDetail();
+  if (b) openReader(b);
+});
+$("#dt-fav").addEventListener("click", () => detailBook && toggleFavorite(detailBook));
+$("#dt-share").addEventListener("click", () => shareBook(detailBook));
+$("#dt-download").addEventListener("click", () => downloadBook(detailBook));
+$("#dt-edit").addEventListener("click", () => {
+  const b = detailBook;
+  closeDetail();
+  if (b) openEdit(b);
+});
+$("#dt-delete").addEventListener("click", () => detailBook && deleteBook(detailBook));
+
+/* ---------- Lector: modos, marcadores y gestos ---------- */
+
+const MODES = ["normal", "sepia", "night"];
+const MODE_NAMES = { normal: "Normal", sepia: "Sepia", night: "Noche" };
+function applyReaderMode(m) {
+  const box = $("#reader");
+  MODES.forEach((x) => box.classList.toggle(`mode-${x}`, x === m));
+  box.dataset.mode = m;
+}
+applyReaderMode(pref("nb_rmode", "normal"));
+$("#rd-mode").addEventListener("click", () => {
+  const next = MODES[(MODES.indexOf($("#reader").dataset.mode) + 1) % MODES.length];
+  applyReaderMode(next);
+  setPref("nb_rmode", next);
+  toast(`Modo ${MODE_NAMES[next]}`, 1500);
+});
+
+// Un toque sobre la página oculta o muestra la barra (lectura sin distracciones).
+$("#page-canvas").addEventListener("click", () => $("#reader").classList.toggle("immersive"));
+
+let bookmarks = [];
+async function loadBookmarks() {
+  const b = reader.book;
+  if (!b) return;
+  const { data, error } = await sb.from("bookmarks").select("*").eq("book_id", b.id).order("page");
+  bookmarks = error ? [] : data;
+}
+function renderBookmarks() {
+  $("#bm-page").textContent = `(pág. ${reader.page})`;
+  const list = $("#bm-list");
+  if (!bookmarks.length) {
+    list.replaceChildren(el("p", { class: "muted" }, "Aún no hay marcadores en este libro."));
+    return;
+  }
+  list.replaceChildren(
+    ...bookmarks.map((m) =>
+      el(
+        "div",
+        { class: "msg-item" },
+        el("strong", {}, `Página ${m.page}`),
+        m.note ? el("p", {}, m.note) : null,
+        el(
+          "div",
+          { class: "row-actions" },
+          el("button", { class: "btn ghost small", type: "button", onclick: () => { $("#bm-modal").hidden = true; go(m.page); } }, "Ir a la página"),
+          el("button", { class: "btn ghost small", type: "button", onclick: async () => {
+            await sb.from("bookmarks").delete().eq("id", m.id);
+            await loadBookmarks();
+            renderBookmarks();
+          } }, "Eliminar")
+        )
+      )
+    )
+  );
+}
+$("#rd-bm").addEventListener("click", async () => {
+  if (!reader.book) return;
+  $("#bm-note").value = "";
+  await loadBookmarks();
+  renderBookmarks();
+  $("#bm-modal").hidden = false;
+});
+$("#bm-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const b = reader.book;
+  if (!b) return;
+  const { error } = await sb.from("bookmarks").insert({ book_id: b.id, page: reader.page, note: $("#bm-note").value.trim() || null });
+  if (error) {
+    toast(`No se pudo guardar el marcador: ${error.message}`);
+    return;
+  }
+  $("#bm-note").value = "";
+  await loadBookmarks();
+  renderBookmarks();
+  toast("Marcador guardado", 2000);
+});
+$("#bm-close").addEventListener("click", () => ($("#bm-modal").hidden = true));
+
+/* ---------- Estadísticas y exportación ---------- */
+
+function barList(entries, total) {
+  const max = Math.max(1, ...entries.map((e) => e[1]));
+  return el(
+    "div",
+    { class: "bars" },
+    entries.map(([name, n]) =>
+      el("div", { class: "bar-row" }, el("span", { class: "bn" }, name), el("span", { class: "bt" }, el("i", { style: `width:${Math.round((n / max) * 100)}%` })), el("span", { class: "bv" }, String(n)))
+    )
+  );
+}
+const countBy = (list, fn) => {
+  const m = new Map();
+  for (const b of list) for (const k of [].concat(fn(b))) if (k) m.set(k, (m.get(k) || 0) + 1);
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+};
+
+function openStats() {
+  const bs = state.books;
+  const bytes = bs.reduce((a, b) => a + (b.size_bytes || 0), 0);
+  const pages = bs.reduce((a, b) => a + (b.pages || 0), 0);
+  const read = bs.reduce((a, b) => a + (b.opens || 0), 0);
+  const GB = 1024 * 1024 * 1024;
+  const pctUsed = Math.min(100, (bytes / GB) * 100);
+  const card = (n, label) => el("div", { class: "stat-card" }, el("strong", {}, String(n)), el("span", { class: "muted" }, label));
+  const top = [...bs].filter((b) => b.opens > 0).sort((a, b) => b.opens - a.opens).slice(0, 5);
+  $("#stats-body").replaceChildren(
+    el("div", { class: "stat-cards" }, card(bs.length, "libros"), card(pages.toLocaleString("es-CL"), "páginas"), card(bs.filter((b) => b.favorite).length, "favoritos"), card(read, "lecturas")),
+    el("p", { class: "muted small-text" }, `Almacenamiento: ${fmtMB(bytes)} de 1 GB (${pctUsed.toFixed(0)}%)`),
+    el("div", { class: "meter" }, el("i", { style: `width:${pctUsed}%` })),
+    el("h3", {}, "Por etiqueta"), barList(allTags().slice(0, 8)),
+    el("h3", {}, "Por categoría"), barList(countBy(bs, (b) => b.category)),
+    top.length ? el("h3", {}, "Más leídos") : null,
+    top.length ? barList(top.map((b) => [b.title, b.opens])) : null
+  );
+  $("#stats-modal").hidden = false;
+}
+
+function saveFile(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+$("#btn-stats").addEventListener("click", openStats);
+$("#st-close").addEventListener("click", () => ($("#stats-modal").hidden = true));
+$("#st-csv").addEventListener("click", () => {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = ["titulo", "autor", "categoria", "etiquetas", "paginas", "tamano_mb", "favorito", "lecturas", "descargas", "agregado"];
+  const rows = state.books.map((b) => [b.title, b.author, b.category, tagsOf(b).join("; "), b.pages, b.size_bytes ? (b.size_bytes / 1048576).toFixed(2) : "", b.favorite ? "si" : "no", b.opens || 0, b.downloads || 0, b.created_at]);
+  saveFile("netbook-biblioteca.csv", "﻿" + [head, ...rows].map((r) => r.map(q).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  toast("Lista descargada (CSV)");
+});
+$("#st-json").addEventListener("click", async () => {
+  const { data: marks } = await sb.from("bookmarks").select("*");
+  const backup = { app: "Netbook", exported_at: new Date().toISOString(), books: state.books, bookmarks: marks || [], progress: [...state.progress.values()] };
+  saveFile("netbook-respaldo.json", JSON.stringify(backup, null, 2), "application/json");
+  toast("Respaldo de datos descargado (los PDFs no se incluyen)", 6000);
+});
+
+/* ---------- App instalable ---------- */
+
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 /* ---------- Arranque ---------- */
 
