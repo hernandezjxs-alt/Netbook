@@ -1,6 +1,6 @@
 "use strict";
 
-const { SUPABASE_URL, SUPABASE_ANON_KEY, CONTACT_FORM_URL, CONTACT_EMAIL } = window.APP_CONFIG || {};
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.APP_CONFIG || {};
 const MAX_MB = 50;
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
@@ -154,6 +154,8 @@ async function loadProfile() {
   const { data, error } = await sb.from("profiles").select("username,role").eq("id", state.user.id).maybeSingle();
   state.profile = error ? null : data;
   renderBadge();
+  $("#btn-inbox").hidden = state.profile?.role !== "admin";
+  loadInbox();
 }
 
 async function refresh() {
@@ -1156,8 +1158,12 @@ $("#edit-form").addEventListener("submit", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (!$("#contact-modal").hidden) {
-    if (e.key === "Escape") $("#contact-modal").hidden = true;
+  if (!$("#confirm-modal").hidden) {
+    if (e.key === "Escape") $("#cf-cancel").click();
+    return;
+  }
+  if (!$("#contact-modal").hidden || !$("#inbox-modal").hidden) {
+    if (e.key === "Escape") { $("#contact-modal").hidden = true; $("#inbox-modal").hidden = true; }
     return;
   }
   if (!$("#confirm-modal").hidden) {
@@ -1208,21 +1214,102 @@ window.addEventListener("pagehide", () => {
 /* ---------- Contacto ---------- */
 
 function openContact() {
-  const frame = $("#ct-frame");
-  const hasForm = /^https:\/\/(docs\.google\.com\/forms|forms\.gle)\//.test(CONTACT_FORM_URL || "");
-  frame.hidden = !hasForm;
-  $("#ct-open").hidden = !hasForm;
-  $("#ct-mail").hidden = !CONTACT_EMAIL;
-  if (CONTACT_EMAIL) $("#ct-mail").href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Contacto desde Netbook")}`;
-  if (hasForm) {
-    const url = CONTACT_FORM_URL.includes("docs.google.com") ? CONTACT_FORM_URL.replace(/[?&]embedded=true/, "") + (CONTACT_FORM_URL.includes("?") ? "&" : "?") + "embedded=true" : CONTACT_FORM_URL;
-    if (frame.getAttribute("src") !== url) frame.setAttribute("src", url);
-    $("#ct-open").href = CONTACT_FORM_URL;
-  }
+  $("#contact-form").reset();
+  $("#ct-status").textContent = "";
+  $("#ct-send").disabled = false;
+  if (state.user && !$("#ct-email").value) $("#ct-email").value = state.user.email || "";
   $("#contact-modal").hidden = false;
 }
 document.querySelectorAll("#btn-contact, .contact-open").forEach((b) => b.addEventListener("click", openContact));
 $("#ct-close").addEventListener("click", () => ($("#contact-modal").hidden = true));
+
+let lastContactAt = 0;
+$("#contact-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const st = $("#ct-status");
+  if ($("#ct-website").value) { // trampa para bots: fingimos éxito
+    $("#contact-modal").hidden = true;
+    return;
+  }
+  if (Date.now() - lastContactAt < 30000) {
+    st.textContent = "Espera unos segundos antes de enviar otro mensaje.";
+    return;
+  }
+  const row = {
+    name: $("#ct-name").value.trim(),
+    email: $("#ct-email").value.trim(),
+    phone: $("#ct-phone").value.trim() || null,
+    message: $("#ct-message").value.trim(),
+  };
+  $("#ct-send").disabled = true;
+  st.classList.add("info");
+  st.textContent = "Enviando…";
+  const { error } = await sb.from("contact_messages").insert(row);
+  if (error) {
+    st.classList.remove("info");
+    st.textContent = `No se pudo enviar: ${error.message}`;
+    $("#ct-send").disabled = false;
+    return;
+  }
+  lastContactAt = Date.now();
+  $("#contact-modal").hidden = true;
+  toast("¡Mensaje enviado! Gracias por escribirme.", 6000);
+});
+
+/* Bandeja (solo admin) */
+
+let inbox = [];
+async function loadInbox() {
+  if (state.profile?.role !== "admin") return;
+  const { data, error } = await sb.from("contact_messages").select("*").order("created_at", { ascending: false });
+  if (error) return;
+  inbox = data;
+  const unread = inbox.filter((m) => !m.read).length;
+  $("#inbox-count").textContent = unread;
+  $("#inbox-count").hidden = !unread;
+}
+
+function renderInbox() {
+  const list = $("#inbox-list");
+  if (!inbox.length) {
+    list.replaceChildren(el("p", { class: "muted" }, "Aún no hay mensajes."));
+    return;
+  }
+  list.replaceChildren(
+    ...inbox.map((m) =>
+      el(
+        "div",
+        { class: "msg-item" + (m.read ? "" : " unread") },
+        el("strong", {}, m.name),
+        el("span", { class: "meta" }, `${m.email}${m.phone ? " · " + m.phone : ""} · ${new Date(m.created_at).toLocaleString("es-CL")}`),
+        el("p", {}, m.message),
+        el(
+          "div",
+          { class: "row-actions" },
+          el("a", { class: "btn ghost small", href: `mailto:${m.email}?subject=${encodeURIComponent("Re: tu mensaje en Netbook")}` }, "Responder"),
+          el("button", { class: "btn ghost small", type: "button", onclick: async () => {
+            await sb.from("contact_messages").update({ read: !m.read }).eq("id", m.id);
+            await loadInbox();
+            renderInbox();
+          } }, m.read ? "Marcar sin leer" : "Marcar leído"),
+          el("button", { class: "btn ghost small", type: "button", onclick: async () => {
+            if (!(await askConfirm("Eliminar mensaje", [el("p", {}, `¿Eliminar el mensaje de ${m.name}?`)], "Eliminar"))) return;
+            await sb.from("contact_messages").delete().eq("id", m.id);
+            await loadInbox();
+            renderInbox();
+          } }, "Eliminar")
+        )
+      )
+    )
+  );
+}
+
+$("#btn-inbox").addEventListener("click", async () => {
+  await loadInbox();
+  renderInbox();
+  $("#inbox-modal").hidden = false;
+});
+$("#inbox-close").addEventListener("click", () => ($("#inbox-modal").hidden = true));
 
 /* ---------- Arranque ---------- */
 

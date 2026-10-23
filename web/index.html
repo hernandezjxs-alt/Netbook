@@ -38,6 +38,7 @@
       <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
       <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
       <button id="btn-contact" class="icon" type="button" aria-label="Contacto" title="Contacto">✉</button>
+      <button id="btn-inbox" class="icon" type="button" aria-label="Mensajes recibidos" title="Mensajes recibidos" hidden>📨<span id="inbox-count" class="dot" hidden></span></button>
       <span id="user-badge" class="badge" hidden></span>
       <button id="btn-logout" class="btn ghost" type="button">Salir</button>
     </header>
@@ -76,17 +77,31 @@
     <button class="linklike contact-open" type="button">✉ Contacto</button>
   </footer>
 
-  <!-- Contacto (formulario de Google) -->
+  <!-- Contacto -->
   <div id="contact-modal" class="modal top" hidden>
-    <div class="modal-card contact-card" role="dialog" aria-modal="true" aria-labelledby="ct-title">
-      <h2 id="ct-title">Contacto</h2>
-      <p class="muted">Déjame tus datos y tu mensaje; me llegará por correo.</p>
-      <iframe id="ct-frame" title="Formulario de contacto" hidden loading="lazy"></iframe>
+    <form id="contact-form" class="modal-card contact-card" autocomplete="on">
+      <h2>Contacto</h2>
+      <p class="muted">Déjame tus datos y tu mensaje; te responderé lo antes posible.</p>
+      <label>Nombre <input id="ct-name" type="text" maxlength="100" minlength="2" autocomplete="name" required></label>
+      <label>Correo <input id="ct-email" type="email" maxlength="160" autocomplete="email" required></label>
+      <label>Teléfono (opcional) <input id="ct-phone" type="text" maxlength="40" inputmode="tel" autocomplete="tel"></label>
+      <label>Mensaje <textarea id="ct-message" rows="5" maxlength="2000" minlength="5" required></textarea></label>
+      <input id="ct-website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" class="hp">
+      <p class="hint">Usaré tus datos solo para responderte. No se comparten con terceros.</p>
+      <p id="ct-status" class="msg" role="status"></p>
       <div class="modal-actions">
-        <a id="ct-open" class="btn ghost" target="_blank" rel="noopener" hidden>Abrir en otra pestaña</a>
-        <a id="ct-mail" class="btn primary" hidden>Escribir por correo</a>
         <button id="ct-close" class="btn ghost" type="button">Cerrar</button>
+        <button id="ct-send" class="btn primary" type="submit">Enviar</button>
       </div>
+    </form>
+  </div>
+
+  <!-- Mensajes recibidos (solo admin) -->
+  <div id="inbox-modal" class="modal top" hidden>
+    <div class="modal-card contact-card">
+      <h2>Mensajes recibidos</h2>
+      <div id="inbox-list" class="inbox"></div>
+      <div class="modal-actions"><button id="inbox-close" class="btn ghost" type="button">Cerrar</button></div>
     </div>
   </div>
 

@@ -95,3 +95,19 @@ and not exists (select 1 from public.profiles where role = 'admin');
 
 -- Para cambiar el rol de alguien manualmente:
 --   update public.profiles set role = 'admin' where email = 'correo@ejemplo.com';
+
+-- Mensajes del formulario de contacto (cualquiera puede enviar; solo el admin los lee)
+create table if not exists public.contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 2 and 100),
+  email text not null check (char_length(email) between 5 and 160 and email like '%@%'),
+  phone text check (phone is null or char_length(phone) <= 40),
+  message text not null check (char_length(message) between 5 and 2000),
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+alter table public.contact_messages enable row level security;
+create policy "cualquiera puede enviar" on public.contact_messages for insert to anon, authenticated with check (read = false);
+create policy "admin lee" on public.contact_messages for select to authenticated using (public.is_admin());
+create policy "admin actualiza" on public.contact_messages for update to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "admin elimina" on public.contact_messages for delete to authenticated using (public.is_admin());

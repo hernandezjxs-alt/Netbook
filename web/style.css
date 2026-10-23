@@ -247,3 +247,14 @@ body.selecting .toast { bottom: 5.5rem; }
 .contact-card iframe { width: 100%; height: min(60vh, 520px); border: 0; border-radius: 8px; background: #fff; }
 a.btn { text-decoration: none; display: inline-block; text-align: center; }
 .contact-open { justify-self: center; }
+
+textarea { width: 100%; padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid #3a3a3a; background: #2a2a2a; color: var(--text); font: inherit; resize: vertical; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+#btn-inbox { position: relative; }
+.dot { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--red); font-size: 0.65rem; line-height: 16px; font-style: normal; }
+.inbox { display: grid; gap: 0.6rem; max-height: 60vh; overflow: auto; }
+.msg-item { padding: 0.7rem; border-radius: 8px; background: rgba(255, 255, 255, 0.06); display: grid; gap: 0.25rem; font-size: 0.88rem; }
+.msg-item.unread { border-left: 3px solid var(--red); }
+.msg-item .meta { color: var(--muted); font-size: 0.78rem; }
+.msg-item p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.msg-item .row-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
