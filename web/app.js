@@ -698,7 +698,7 @@ function openUpload() {
   $("#up-submit").hidden = false;
   $("#up-submit").disabled = false;
   $("#up-cancel").disabled = false;
-  $("#up-cancel").textContent = "Cancelar";
+  setUploadDone(false);
   $("#single-fields").hidden = false;
   $("#up-title").required = true;
   lastAutoTags = "";
@@ -707,8 +707,24 @@ function openUpload() {
   $("#upload-modal").hidden = false;
 }
 
+// Vista final del modal: solo el informe y un botón «Finalizar».
+function setUploadDone(done) {
+  $("#upload-form").classList.toggle("done", done);
+  $("#up-title-h").textContent = done ? "Subida finalizada" : "Subir PDF";
+  $("#up-cancel").textContent = done ? "Finalizar" : "Cancelar";
+  $("#up-cancel").className = done ? "btn primary" : "btn ghost";
+}
+
 function closeUpload() {
+  const wasDone = $("#upload-form").classList.contains("done");
   $("#upload-modal").hidden = true;
+  if (wasDone) {
+    $("#search").value = "";
+    state.query = "";
+    state.activeTags.clear();
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" }); // vuelve a la página principal
+  }
 }
 
 $("#up-category").addEventListener("input", () => renderCategoryChips($("#up-cat-sugs"), $("#up-category")));
@@ -823,7 +839,7 @@ $("#up-file").addEventListener("change", async (e) => {
   $("#up-title").value = "";
   $("#up-author").value = "";
   $("#up-submit").hidden = false;
-  $("#up-cancel").textContent = "Cancelar";
+  setUploadDone(false);
   upStatus("");
   clearReport();
 
@@ -1031,7 +1047,8 @@ $("#upload-form").addEventListener("submit", async (e) => {
   );
   renderReport(report, { final: true });
   submit.hidden = true;
-  cancel.textContent = "Cerrar";
+  setUploadDone(true);
+  $("#upload-modal").querySelector(".modal-card").scrollTop = 0;
 });
 
 /* ---------- Lector ---------- */

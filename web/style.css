@@ -385,3 +385,9 @@ details.pick > summary { cursor: pointer; padding: 0.6rem 0.8rem; font-size: 0.9
 details.pick > summary::-webkit-details-marker { display: none; }
 details.pick[open] > summary { border-bottom: 1px solid var(--line); color: var(--muted); }
 details.pick > .sugs { padding: 0.6rem; }
+
+/* Vista final de la subida */
+#upload-form.done > :not(h2):not(#up-status):not(#up-summary):not(#up-report):not(.modal-actions) { display: none; }
+#upload-form.done .report { max-height: 45vh; }
+#upload-form .modal-actions { position: sticky; bottom: -1.5rem; padding: 0.8rem 0 0; background: linear-gradient(to top, rgba(24, 24, 33, 1) 70%, transparent); flex-wrap: wrap; }
+#upload-form.done .modal-actions .btn.primary { flex: 1 1 auto; }
