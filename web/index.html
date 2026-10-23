@@ -64,16 +64,18 @@
   <div id="upload-modal" class="modal" hidden>
     <form id="upload-form" class="modal-card">
       <h2>Subir PDF</h2>
-      <label>Archivo (máx. 50 MB)
-        <input id="up-file" type="file" accept="application/pdf,.pdf" required>
+      <label>Archivos PDF (puedes elegir varios, máx. 50 MB c/u)
+        <input id="up-file" type="file" accept="application/pdf,.pdf" multiple required>
       </label>
-      <label>Título
-        <input id="up-title" type="text" maxlength="200" required>
-      </label>
-      <label>Autor
-        <input id="up-author" type="text" maxlength="200">
-      </label>
-      <label>Categoría
+      <div id="single-fields" class="fields">
+        <label>Título
+          <input id="up-title" type="text" maxlength="200" required>
+        </label>
+        <label>Autor
+          <input id="up-author" type="text" maxlength="200">
+        </label>
+      </div>
+      <label>Categoría (para todos los archivos de esta subida)
         <input id="up-category" type="text" maxlength="60" list="category-list" value="General" required>
         <datalist id="category-list"></datalist>
       </label>

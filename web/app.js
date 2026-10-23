@@ -270,6 +270,9 @@ function openUpload() {
   $("#up-category").value = "General";
   $("#up-status").textContent = "";
   $("#up-submit").disabled = false;
+  $("#up-cancel").disabled = false;
+  $("#single-fields").hidden = false;
+  $("#up-title").required = true;
   const cats = [...new Set(state.books.map((b) => b.category).filter(Boolean))].sort();
   $("#category-list").replaceChildren(...cats.map((c) => el("option", { value: c })));
   $("#upload-modal").hidden = false;
@@ -283,11 +286,17 @@ $("#btn-upload").addEventListener("click", openUpload);
 $("#btn-upload-empty").addEventListener("click", openUpload);
 $("#up-cancel").addEventListener("click", closeUpload);
 
+const titleFromName = (name) => name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
+
 $("#up-file").addEventListener("change", (e) => {
-  const f = e.target.files[0];
-  if (f && !$("#up-title").value) {
-    $("#up-title").value = f.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ").trim();
-  }
+  const files = e.target.files;
+  const multi = files.length > 1;
+  $("#single-fields").hidden = multi;
+  $("#up-title").required = !multi;
+  $("#up-status").textContent = multi
+    ? `${files.length} archivos seleccionados: el título de cada libro se toma del nombre del archivo.`
+    : "";
+  if (!multi && files[0] && !$("#up-title").value) $("#up-title").value = titleFromName(files[0].name);
 });
 
 async function renderCover(pdf) {
@@ -304,25 +313,12 @@ async function renderCover(pdf) {
   return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
 }
 
-$("#upload-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const file = $("#up-file").files[0];
-  const status = $("#up-status");
-  const submit = $("#up-submit");
-  if (!file) return;
-
+// Sube un PDF: genera portada, guarda archivo y fila. Devuelve null si salió bien o un mensaje de error.
+async function uploadOne(file, meta) {
   const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-  if (!isPdf) {
-    status.textContent = "El archivo debe ser un PDF.";
-    return;
-  }
-  if (file.size > MAX_MB * 1024 * 1024) {
-    status.textContent = `El archivo supera ${MAX_MB} MB (límite del plan gratuito de Supabase).`;
-    return;
-  }
+  if (!isPdf) return "no es un PDF";
+  if (file.size > MAX_MB * 1024 * 1024) return `supera ${MAX_MB} MB`;
 
-  submit.disabled = true;
-  status.textContent = "Procesando PDF…";
   const id = crypto.randomUUID();
   const uid = state.user.id;
   const pdfPath = `${uid}/${id}.pdf`;
@@ -336,7 +332,6 @@ $("#upload-form").addEventListener("submit", async (e) => {
     const coverBlob = await renderCover(pdf);
     pdf.destroy();
 
-    status.textContent = "Subiendo archivo…";
     const up1 = await sb.storage.from("pdfs").upload(pdfPath, file, { contentType: "application/pdf" });
     if (up1.error) throw up1.error;
     pdfUploaded = true;
@@ -347,25 +342,71 @@ $("#upload-form").addEventListener("submit", async (e) => {
 
     const { error } = await sb.from("books").insert({
       id,
-      title: $("#up-title").value.trim(),
-      author: $("#up-author").value.trim() || null,
-      category: $("#up-category").value.trim() || "General",
+      title: meta.title,
+      author: meta.author,
+      category: meta.category,
       pages,
       pdf_path: pdfPath,
       cover_path: coverPath,
     });
     if (error) throw error;
-
-    closeUpload();
-    toast("Libro agregado");
-    await refresh();
+    return null;
   } catch (err) {
     // Limpia archivos huérfanos si algo falló a medio camino.
     if (pdfUploaded) await sb.storage.from("pdfs").remove([pdfPath]);
     if (coverUploaded) await sb.storage.from("covers").remove([coverPath]);
-    status.textContent = `No se pudo subir: ${err.message || err}`;
-    submit.disabled = false;
+    return err.message || String(err);
   }
+}
+
+$("#upload-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const files = [...$("#up-file").files];
+  if (!files.length) return;
+  const status = $("#up-status");
+  const submit = $("#up-submit");
+  const cancel = $("#up-cancel");
+  const multi = files.length > 1;
+  const category = $("#up-category").value.trim() || "General";
+
+  submit.disabled = true;
+  cancel.disabled = true;
+
+  const known = new Set(state.books.map((b) => b.title.toLowerCase()));
+  let done = 0;
+  const skipped = [];
+  const failed = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const title = multi ? titleFromName(f.name) : $("#up-title").value.trim() || titleFromName(f.name);
+    status.textContent = `Subiendo ${i + 1} de ${files.length}: ${f.name}`;
+
+    // En subidas múltiples se omiten títulos ya existentes (útil para reintentar sin duplicar).
+    if (multi && known.has(title.toLowerCase())) {
+      skipped.push(f.name);
+      continue;
+    }
+    const author = multi ? null : $("#up-author").value.trim() || null;
+    const err = await uploadOne(f, { title, author, category });
+    if (err) failed.push(`${f.name} (${err})`);
+    else {
+      done++;
+      known.add(title.toLowerCase());
+    }
+  }
+
+  await refresh();
+  cancel.disabled = false;
+
+  if (!failed.length) {
+    closeUpload();
+    const extra = skipped.length ? `, ${skipped.length} ya existían` : "";
+    toast(`${done} libro(s) agregado(s)${extra}`);
+    return;
+  }
+  status.textContent = `Se subieron ${done} de ${files.length}. Fallaron: ${failed.join(" · ")}`;
+  submit.disabled = false;
 });
 
 /* ---------- Lector ---------- */
