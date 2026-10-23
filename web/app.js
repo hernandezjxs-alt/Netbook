@@ -236,6 +236,7 @@ async function doAuth(mode) {
             email,
             password,
             options: {
+              emailRedirectTo: location.origin + location.pathname,
               data: {
                 username: $("#username").value.trim(),
                 full_name: $("#full-name").value.trim(),
