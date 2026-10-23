@@ -83,6 +83,96 @@ const fmtMB = (bytes) => `${(bytes / 1048576).toFixed(bytes >= 10 * 1048576 ? 0 
 
 /* ---------- Autenticación ---------- */
 
+/* RUT chileno */
+
+const cleanRut = (r) => String(r || "").replace(/[^0-9kK]/g, "").toUpperCase();
+
+function validRut(r) {
+  const c = cleanRut(r);
+  if (c.length < 8 || c.length > 9) return false;
+  const body = c.slice(0, -1);
+  if (!/^\d+$/.test(body)) return false;
+  let sum = 0, mul = 2;
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += Number(body[i]) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const calc = 11 - (sum % 11);
+  return c.slice(-1) === (calc === 11 ? "0" : calc === 10 ? "K" : String(calc));
+}
+
+function formatRut(r) {
+  const c = cleanRut(r);
+  if (c.length < 2) return c;
+  return `${c.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${c.slice(-1)}`;
+}
+
+const maskRut = (r) => (r ? `${formatRut(r).slice(0, -5)}***-${r.slice(-1)}` : "—");
+
+// Da formato mientras se escribe.
+function bindRutInput(input) {
+  input.addEventListener("input", () => {
+    input.value = formatRut(input.value);
+  });
+}
+bindRutInput($("#rut"));
+bindRutInput($("#pf-rut"));
+
+/* Textos legales (plantilla; conviene revisarlos con un abogado) */
+
+const LEGAL = {
+  terms: {
+    title: "Términos de uso",
+    paras: [
+      "Netbook es una biblioteca privada de archivos PDF administrada por JH. Al crear una cuenta aceptas estas condiciones.",
+      "Eres responsable de los archivos que subes: solo sube material del que seas autor o tengas permiso para guardar y compartir. Podemos eliminar contenido que infrinja derechos de autor u otras leyes.",
+      "Los enlaces para compartir un PDF son temporales (7 días) y cualquiera que los tenga puede abrir ese archivo mientras estén vigentes. Compártelos con cuidado.",
+      "El servicio se ofrece tal cual, sin garantía de disponibilidad. Conserva copia de tus archivos importantes.",
+      "Podemos suspender cuentas que hagan un uso abusivo del servicio.",
+    ],
+  },
+  privacy: {
+    title: "Política de privacidad",
+    paras: [
+      "Responsable: JH (contacto desde el botón ✉ de esta página).",
+      "Datos que guardamos: nombre completo, RUT, correo, nombre de usuario, los libros que subes y tu progreso de lectura. Si usas el formulario de contacto, guardamos lo que escribas en él.",
+      "Para qué: identificar a las personas que suben libros, administrar tu cuenta y responder tus mensajes. No vendemos ni compartimos tus datos con terceros.",
+      "Dónde: en Supabase (base de datos y almacenamiento privado, con acceso restringido por cuenta). Solo el administrador puede ver los datos de perfil; tus libros solo los ves tú.",
+      "Tus derechos: puedes pedir acceso, corrección o eliminación de tus datos escribiendo desde el botón de contacto.",
+      "Conservamos los datos mientras tengas cuenta y los eliminamos cuando lo solicites.",
+    ],
+  },
+};
+
+function openLegal(kind) {
+  const d = LEGAL[kind];
+  $("#lg-title").textContent = d.title;
+  $("#lg-body").replaceChildren(...d.paras.map((t) => el("p", {}, t)), el("p", { class: "muted" }, "Última actualización: octubre 2026."));
+  $("#legal-modal").hidden = false;
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-legal]");
+  if (t) openLegal(t.dataset.legal);
+});
+$("#lg-close").addEventListener("click", () => ($("#legal-modal").hidden = true));
+
+/* ---------- Autenticación ---------- */
+
+let authMode = "signin";
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const signup = mode === "signup";
+  $("#signup-fields").hidden = !signup;
+  $("#consent-row").hidden = !signup;
+  $("#btn-submit").textContent = signup ? "Crear cuenta" : "Entrar";
+  $("#btn-mode").textContent = signup ? "Ya tengo cuenta" : "Crear cuenta";
+  $("#btn-forgot").hidden = signup;
+  $("#auth-sub").textContent = signup ? "Crea tu cuenta" : "Tu biblioteca de PDFs";
+  $("#password").autocomplete = signup ? "new-password" : "current-password";
+  $("#auth-msg").textContent = "";
+}
+
 async function doAuth(mode) {
   const email = $("#email").value.trim();
   const password = $("#password").value;
@@ -92,18 +182,61 @@ async function doAuth(mode) {
     msg.textContent = "Ingresa un correo y una contraseña de al menos 6 caracteres.";
     return;
   }
-  const { data, error } =
-    mode === "signup"
-      ? await sb.auth.signUp({ email, password, options: { data: { username: $("#username").value.trim() } } })
-      : await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    msg.textContent = error.message;
-    return;
+  if (mode === "signup") {
+    const fullName = $("#full-name").value.trim();
+    if (fullName.length < 2) { msg.textContent = "Escribe tu nombre completo."; return; }
+    if (!validRut($("#rut").value)) { msg.textContent = "El RUT no es válido. Revisa el número y el dígito verificador."; return; }
+    if (!$("#consent").checked) { msg.textContent = "Debes aceptar los Términos y la Política de privacidad."; return; }
   }
-  if (mode === "signup" && !data.session) {
-    msg.textContent = "Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.";
+  $("#btn-submit").disabled = true;
+  try {
+    const { data, error } =
+      mode === "signup"
+        ? await sb.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                username: $("#username").value.trim(),
+                full_name: $("#full-name").value.trim(),
+                rut: formatRut($("#rut").value),
+                consent: "true",
+              },
+            },
+          })
+        : await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      msg.textContent = /duplicate key|profiles_rut/i.test(error.message)
+        ? "Ese RUT ya está registrado."
+        : /database error/i.test(error.message)
+        ? "No se pudo crear la cuenta: revisa que el RUT no esté ya registrado."
+        : error.message;
+      return;
+    }
+    if (mode === "signup" && !data.session) {
+      msg.textContent = "Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.";
+    }
+  } finally {
+    $("#btn-submit").disabled = false;
   }
 }
+
+$("#btn-mode").addEventListener("click", () => setAuthMode(authMode === "signin" ? "signup" : "signin"));
+$("#btn-forgot").addEventListener("click", async () => {
+  const email = $("#email").value.trim();
+  const msg = $("#auth-msg");
+  if (!email) { msg.textContent = "Escribe tu correo arriba y vuelve a pulsar «¿Olvidaste tu contraseña?»."; return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  msg.textContent = error ? error.message : "Si el correo existe, te enviamos un enlace para crear una nueva contraseña.";
+});
+
+$("#reset-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { error } = await sb.auth.updateUser({ password: $("#rs-pass").value });
+  if (error) { $("#rs-status").textContent = error.message; return; }
+  $("#reset-modal").hidden = true;
+  toast("Contraseña actualizada");
+});
 
 function setSession(session) {
   const prevId = state.user?.id;
@@ -114,6 +247,7 @@ function setSession(session) {
     refresh();
   } else if (!state.user) {
     state.profile = null;
+    askedProfile = false;
     state.activeTags.clear();
     state.selected.clear();
     state.selecting = false;
@@ -128,9 +262,8 @@ function setSession(session) {
 
 $("#auth-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  doAuth("signin");
+  doAuth(authMode);
 });
-$("#btn-signup").addEventListener("click", () => doAuth("signup"));
 $("#btn-logout").addEventListener("click", async () => {
   await sb.auth.signOut();
 });
@@ -151,11 +284,13 @@ function renderBadge() {
 
 async function loadProfile() {
   // Si aún no se ejecutó profiles.sql, la tabla no existe: la app sigue funcionando sin rol.
-  const { data, error } = await sb.from("profiles").select("username,role").eq("id", state.user.id).maybeSingle();
+  const { data, error } = await sb.from("profiles").select("username,role,full_name,rut,consent_at").eq("id", state.user.id).maybeSingle();
   state.profile = error ? null : data;
   renderBadge();
   $("#btn-inbox").hidden = state.profile?.role !== "admin";
+  $("#btn-users").hidden = state.profile?.role !== "admin";
   loadInbox();
+  maybeAskProfile();
 }
 
 async function refresh() {
@@ -1162,8 +1297,12 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") $("#cf-cancel").click();
     return;
   }
-  if (!$("#contact-modal").hidden || !$("#inbox-modal").hidden) {
-    if (e.key === "Escape") { $("#contact-modal").hidden = true; $("#inbox-modal").hidden = true; }
+  if (!$("#legal-modal").hidden) {
+    if (e.key === "Escape") $("#legal-modal").hidden = true;
+    return;
+  }
+  if (!$("#contact-modal").hidden || !$("#inbox-modal").hidden || !$("#users-modal").hidden) {
+    if (e.key === "Escape") { $("#contact-modal").hidden = true; $("#inbox-modal").hidden = true; $("#users-modal").hidden = true; }
     return;
   }
   if (!$("#confirm-modal").hidden) {
@@ -1311,10 +1450,69 @@ $("#btn-inbox").addEventListener("click", async () => {
 });
 $("#inbox-close").addEventListener("click", () => ($("#inbox-modal").hidden = true));
 
+/* ---------- Perfil y usuarios ---------- */
+
+let askedProfile = false;
+function maybeAskProfile() {
+  const p = state.profile;
+  if (!p || askedProfile || (p.full_name && p.rut && p.consent_at)) return;
+  askedProfile = true;
+  $("#pf-name").value = p.full_name || "";
+  $("#pf-rut").value = p.rut ? formatRut(p.rut) : "";
+  $("#pf-consent").checked = false;
+  $("#pf-status").textContent = "";
+  $("#profile-modal").hidden = false;
+}
+$("#pf-later").addEventListener("click", () => ($("#profile-modal").hidden = true));
+$("#profile-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const st = $("#pf-status");
+  if (!validRut($("#pf-rut").value)) { st.textContent = "El RUT no es válido."; return; }
+  const patch = { full_name: $("#pf-name").value.trim(), rut: formatRut($("#pf-rut").value), consent_at: new Date().toISOString() };
+  const { error } = await sb.from("profiles").update(patch).eq("id", state.user.id);
+  if (error) { st.textContent = /duplicate|unique/i.test(error.message) ? "Ese RUT ya está registrado." : `No se pudo guardar: ${error.message}`; return; }
+  Object.assign(state.profile, patch);
+  $("#profile-modal").hidden = true;
+  toast("Perfil actualizado");
+});
+
+$("#btn-users").addEventListener("click", async () => {
+  const { data, error } = await sb.rpc("admin_users");
+  const list = $("#users-list");
+  if (error) {
+    list.replaceChildren(el("p", { class: "msg" }, error.message));
+  } else {
+    list.replaceChildren(
+      ...data.map((u) => {
+        const rutSpan = el("span", {}, maskRut(u.rut));
+        return el(
+          "div",
+          { class: "msg-item" },
+          el("strong", {}, `${u.full_name || u.username || u.email}${u.role === "admin" ? " · Admin" : ""}`),
+          el("span", { class: "meta" }, `${u.email} · ${u.books} libro(s) · desde ${new Date(u.created_at).toLocaleDateString("es-CL")}`),
+          el("span", { class: "meta" }, "RUT: ", rutSpan, " ",
+            u.rut ? el("button", { class: "linklike", type: "button", onclick: (ev) => {
+              const shown = rutSpan.dataset.shown === "1";
+              rutSpan.textContent = shown ? maskRut(u.rut) : formatRut(u.rut);
+              rutSpan.dataset.shown = shown ? "0" : "1";
+              ev.currentTarget.textContent = shown ? "ver" : "ocultar";
+            } }, "ver") : null),
+          el("span", { class: "meta" }, u.consent_at ? `Aceptó términos el ${new Date(u.consent_at).toLocaleDateString("es-CL")}` : "Sin aceptación de términos")
+        );
+      })
+    );
+  }
+  $("#users-modal").hidden = false;
+});
+$("#users-close").addEventListener("click", () => ($("#users-modal").hidden = true));
+
 /* ---------- Arranque ---------- */
 
 (async function boot() {
   const { data } = await sb.auth.getSession();
   setSession(data.session);
-  sb.auth.onAuthStateChange((_event, session) => setSession(session));
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === "PASSWORD_RECOVERY") $("#reset-modal").hidden = false;
+    setSession(session);
+  });
 })();

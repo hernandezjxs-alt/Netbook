@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#141414">
+  <meta name="theme-color" content="#0b0b10">
+  <meta name="description" content="Netbook: tu biblioteca privada de PDFs.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <title>Netbook</title>
   <link rel="stylesheet" href="style.css?v=__V__">
 </head>
@@ -13,19 +20,33 @@
   <main id="auth" class="auth" hidden>
     <form id="auth-form" class="auth-card" autocomplete="on">
       <h1 class="logo">NETBOOK</h1>
-      <p class="muted">Tu biblioteca de PDFs</p>
-      <label>Usuario (correo)
+      <p id="auth-sub" class="muted">Tu biblioteca de PDFs</p>
+      <div id="signup-fields" class="fields" hidden>
+        <label>Nombre completo
+          <input id="full-name" type="text" maxlength="100" autocomplete="name">
+        </label>
+        <label>RUT
+          <input id="rut" type="text" maxlength="12" inputmode="text" placeholder="12.345.678-5" autocomplete="off">
+        </label>
+        <label>Nombre de usuario <span class="hint">(opcional)</span>
+          <input id="username" type="text" maxlength="40" autocomplete="nickname">
+        </label>
+      </div>
+      <label>Correo
         <input id="email" type="email" autocomplete="email" required>
       </label>
       <label>Contraseña
         <input id="password" type="password" autocomplete="current-password" minlength="6" required>
       </label>
-      <button class="btn primary" type="submit">Entrar</button>
-      <hr class="sep">
-      <label>Nombre de usuario <span class="hint">(opcional, solo al crear cuenta)</span>
-        <input id="username" type="text" maxlength="40" autocomplete="nickname">
+      <label id="consent-row" class="check" hidden>
+        <input id="consent" type="checkbox">
+        <span>Acepto los <button type="button" class="linklike" data-legal="terms">Términos</button> y la
+        <button type="button" class="linklike" data-legal="privacy">Política de privacidad</button>, y que se guarden mis datos para administrar mi cuenta.</span>
       </label>
-      <button id="btn-signup" class="btn ghost" type="button">Crear cuenta</button>
+      <button id="btn-submit" class="btn primary" type="submit">Entrar</button>
+      <button id="btn-forgot" class="linklike center" type="button">¿Olvidaste tu contraseña?</button>
+      <hr class="sep">
+      <button id="btn-mode" class="btn ghost" type="button">Crear cuenta</button>
       <p id="auth-msg" class="msg" role="status"></p>
       <button class="btn ghost small contact-open" type="button">✉ Contacto</button>
     </form>
@@ -38,6 +59,7 @@
       <input id="search" class="search" type="search" placeholder="Buscar título, autor o categoría…" aria-label="Buscar">
       <button id="btn-upload" class="btn primary" type="button">+ Subir PDF</button>
       <button id="btn-contact" class="icon" type="button" aria-label="Contacto" title="Contacto">✉</button>
+      <button id="btn-users" class="icon" type="button" aria-label="Usuarios" title="Usuarios" hidden>👥</button>
       <button id="btn-inbox" class="icon" type="button" aria-label="Mensajes recibidos" title="Mensajes recibidos" hidden>📨<span id="inbox-count" class="dot" hidden></span></button>
       <span id="user-badge" class="badge" hidden></span>
       <button id="btn-logout" class="btn ghost" type="button">Salir</button>
@@ -74,8 +96,57 @@
 
   <footer class="site-footer">
     <span>Elaborado por <strong>JH</strong> · Todos los derechos reservados · Octubre 2026</span>
-    <button class="linklike contact-open" type="button">✉ Contacto</button>
+    <span><button class="linklike" type="button" data-legal="terms">Términos</button> ·
+    <button class="linklike" type="button" data-legal="privacy">Privacidad</button> ·
+    <button class="linklike contact-open" type="button">✉ Contacto</button></span>
   </footer>
+
+  <!-- Términos y privacidad -->
+  <div id="legal-modal" class="modal top" hidden>
+    <div class="modal-card contact-card" role="dialog" aria-modal="true">
+      <h2 id="lg-title"></h2>
+      <div id="lg-body" class="legal"></div>
+      <div class="modal-actions"><button id="lg-close" class="btn primary" type="button">Entendido</button></div>
+    </div>
+  </div>
+
+  <!-- Nueva contraseña (enlace de recuperación) -->
+  <div id="reset-modal" class="modal top" hidden>
+    <form id="reset-form" class="modal-card">
+      <h2>Nueva contraseña</h2>
+      <label>Escribe tu nueva contraseña
+        <input id="rs-pass" type="password" minlength="6" autocomplete="new-password" required>
+      </label>
+      <p id="rs-status" class="msg" role="status"></p>
+      <div class="modal-actions"><button class="btn primary" type="submit">Guardar</button></div>
+    </form>
+  </div>
+
+  <!-- Completar perfil (cuentas anteriores) -->
+  <div id="profile-modal" class="modal top" hidden>
+    <form id="profile-form" class="modal-card">
+      <h2>Completa tu perfil</h2>
+      <p class="muted">Necesitamos tus datos para identificar quién sube los libros.</p>
+      <label>Nombre completo <input id="pf-name" type="text" maxlength="100" required></label>
+      <label>RUT <input id="pf-rut" type="text" maxlength="12" placeholder="12.345.678-5" required></label>
+      <label class="check"><input id="pf-consent" type="checkbox" required>
+        <span>Acepto los <button type="button" class="linklike" data-legal="terms">Términos</button> y la <button type="button" class="linklike" data-legal="privacy">Política de privacidad</button>.</span></label>
+      <p id="pf-status" class="msg" role="status"></p>
+      <div class="modal-actions">
+        <button id="pf-later" class="btn ghost" type="button">Más tarde</button>
+        <button class="btn primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Usuarios (solo admin) -->
+  <div id="users-modal" class="modal top" hidden>
+    <div class="modal-card contact-card">
+      <h2>Usuarios</h2>
+      <div id="users-list" class="inbox"></div>
+      <div class="modal-actions"><button id="users-close" class="btn ghost" type="button">Cerrar</button></div>
+    </div>
+  </div>
 
   <!-- Contacto -->
   <div id="contact-modal" class="modal top" hidden>
@@ -129,6 +200,8 @@
       </label>
       <div id="up-tag-sugs" class="sugs"></div>
       <label class="check"><input id="up-autotags" type="checkbox" checked> Sugerir etiquetas según el título</label>
+      <label class="check"><input id="up-rights" type="checkbox" required>
+        <span>Declaro que tengo derecho a guardar y compartir estos archivos (no infringen derechos de autor).</span></label>
       <p id="up-status" class="msg" role="status"></p>
       <p id="up-summary" class="summary" role="status" hidden></p>
       <ul id="up-report" class="report" hidden></ul>

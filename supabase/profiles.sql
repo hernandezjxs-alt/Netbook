@@ -111,3 +111,7 @@ create policy "cualquiera puede enviar" on public.contact_messages for insert to
 create policy "admin lee" on public.contact_messages for select to authenticated using (public.is_admin());
 create policy "admin actualiza" on public.contact_messages for update to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "admin elimina" on public.contact_messages for delete to authenticated using (public.is_admin());
+
+-- Identidad: nombre completo, RUT (validado con módulo 11) y consentimiento. Ver migración "profiles_identity_fields"
+-- en el panel de Supabase: columnas full_name, rut, consent_at; funciones valid_rut, norm_rut, admin_users;
+-- y handle_new_user actualizado para leer full_name / rut / consent de los metadatos del registro.

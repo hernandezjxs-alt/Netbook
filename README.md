@@ -79,6 +79,16 @@ La anon key es pública por diseño; los datos quedan protegidos por RLS y los b
 - Lector: flechas del teclado o deslizar en el móvil, zoom, y el progreso se guarda solo.
 - Para eliminar un libro, ábrelo y usa el botón 🗑.
 
+## Cuentas, perfil y administración
+
+- Al crear cuenta se piden nombre completo, **RUT** (se valida el dígito verificador, también en la base de datos), correo y
+  aceptar Términos y Privacidad. Las cuentas anteriores ven un aviso para completar el perfil.
+- «¿Olvidaste tu contraseña?» envía un enlace de recuperación (configura la *Site URL* en Supabase Auth).
+- El admin ve 👥 *Usuarios* (RUT enmascarado, con botón para verlo) y 📨 *Mensajes* del formulario de contacto.
+- Al subir libros hay que declarar que se tiene derecho a compartirlos. Los textos legales (en `app.js`, `LEGAL`) son una plantilla:
+  conviene revisarlos con un abogado (Ley 19.628 y la nueva Ley 21.719 de datos personales).
+- La web es instalable en el celular («Agregar a pantalla de inicio»).
+
 ## Límites del plan gratuito de Supabase
 
 - 1 GB de almacenamiento en total y 50 MB por archivo.
