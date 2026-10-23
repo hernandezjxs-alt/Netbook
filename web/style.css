@@ -557,3 +557,10 @@ details.pick > .sugs { padding: 0.6rem; }
 }
 .reader.immersive .rd-banner { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; border-top: 1px solid var(--line); border-bottom: 0; background: rgba(20, 20, 28, 0.92); }
 .reader.fs { background: #000; }
+
+/* iPhone: evita zoom automático y desplazamiento lateral */
+html { overflow-x: hidden; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { max-width: 100%; }
+input, select, textarea { font-size: max(16px, 1rem); }
+.topbar { padding-left: max(var(--gutter), env(safe-area-inset-left)); padding-right: max(var(--gutter), env(safe-area-inset-right)); }
+@media (max-width: 640px) { .select { font-size: 16px; } }
